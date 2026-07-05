@@ -9,36 +9,66 @@
 #include <unistd.h>
 #include <CommonCrypto/CommonCrypto.h>
 #include <CommonCrypto/CommonRandom.h>
+#include "debug.h"
 #include "platform/platform.h"
 
+// mach_host_self() increments the send-right refcount on each call. Caching the
+// right avoids leaking refs when guests poll /proc/stat or /proc/meminfo.
+static mach_port_t cached_host_self(void) {
+    static mach_port_t host = MACH_PORT_NULL;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        host = mach_host_self();
+    });
+    return host;
+}
+
 struct cpu_usage get_cpu_usage() {
-    host_cpu_load_info_data_t load;
+    host_cpu_load_info_data_t load = {};
     mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
-    host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, (host_info_t) &load, &count);
-    struct cpu_usage usage;
-    usage.user_ticks = load.cpu_ticks[CPU_STATE_USER];
-    usage.system_ticks = load.cpu_ticks[CPU_STATE_SYSTEM];
-    usage.idle_ticks = load.cpu_ticks[CPU_STATE_IDLE];
-    usage.nice_ticks = load.cpu_ticks[CPU_STATE_NICE];
-    return usage;
+    if (host_statistics(cached_host_self(), HOST_CPU_LOAD_INFO, (host_info_t) &load, &count) != KERN_SUCCESS)
+        return (struct cpu_usage) {};
+    return (struct cpu_usage) {
+        .user_ticks = load.cpu_ticks[CPU_STATE_USER],
+        .system_ticks = load.cpu_ticks[CPU_STATE_SYSTEM],
+        .idle_ticks = load.cpu_ticks[CPU_STATE_IDLE],
+        .nice_ticks = load.cpu_ticks[CPU_STATE_NICE],
+    };
 }
 
 struct mem_usage get_mem_usage() {
+    static struct mem_usage last_good;
     host_basic_info_data_t basic = {};
-    mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
-    kern_return_t status = host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t) &basic, &count);
-    assert(status == KERN_SUCCESS);
     vm_statistics64_data_t vm = {};
-    count = HOST_VM_INFO64_COUNT;
-    status = host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info_t) &vm, &count);
-    assert(status == KERN_SUCCESS);
+    mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
+    kern_return_t status = host_info(cached_host_self(), HOST_BASIC_INFO, (host_info_t) &basic, &count);
+    if (status == KERN_SUCCESS) {
+        count = HOST_VM_INFO64_COUNT;
+        status = host_statistics64(cached_host_self(), HOST_VM_INFO64, (host_info_t) &vm, &count);
+    }
+    if (status != KERN_SUCCESS) {
+        printk("WARNING: get_mem_usage: Mach host statistics failed (%d)\n", status);
+        if (last_good.total != 0)
+            return last_good;
+        uint64_t total = 0;
+        size_t size = sizeof(total);
+        if (sysctlbyname("hw.memsize", &total, &size, NULL, 0) != 0 || total == 0)
+            total = 4ULL * 1024 * 1024 * 1024;
+        return (struct mem_usage) {
+            .total = total,
+            .free = total / 4,
+            .active = total / 4,
+            .inactive = total / 4,
+        };
+    }
 
-    struct mem_usage usage;
-    usage.total = basic.max_mem;
-    usage.free = vm.free_count * vm_page_size;
-    usage.active = vm.active_count * vm_page_size;
-    usage.inactive = vm.inactive_count * vm_page_size;
-    return usage;
+    last_good = (struct mem_usage) {
+        .total = basic.max_mem,
+        .free = vm.free_count * vm_page_size,
+        .active = vm.active_count * vm_page_size,
+        .inactive = vm.inactive_count * vm_page_size,
+    };
+    return last_good;
 }
 
 struct uptime_info get_uptime() {
