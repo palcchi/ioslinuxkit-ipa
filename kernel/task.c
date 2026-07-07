@@ -72,6 +72,12 @@ struct task *task_create_(struct task *parent) {
     task->cpu.excl_pair_size = 0;
 #endif
 
+    // The poke flag must not be inherited: poked_ptr would alias the parent's
+    // _poked byte (cross-task pokes), and a copied _poked=true seeds a
+    // permanent one-interrupt-per-block storm in the child.
+    task->cpu.poked_ptr = &task->cpu._poked;
+    task->cpu._poked = false;
+
     // Initialize blocking state for deadlock detection.
     task->blocking = false;
     {

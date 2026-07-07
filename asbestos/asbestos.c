@@ -1091,7 +1091,11 @@ static int cpu_step_to_interrupt(struct cpu_state *cpu, struct tlb *tlb) {
         if (interrupt == INT_NONE && (++frame->cpu.cycle & ((1 << 10) - 1)) == 0)
             interrupt = INT_TIMER;
     }
+    // _poked is owned by the live poked_ptr channel. Do not restore the stale
+    // snapshot captured when this fiber frame was entered.
+    bool live_poked = cpu->_poked;
     *cpu = frame->cpu;
+    cpu->_poked = live_poked;
 
     // Release jetsam_lock read. Jetsam cleanup can now proceed.
     read_wrunlock(&asbestos->jetsam_lock);
@@ -1109,7 +1113,9 @@ static int cpu_single_step(struct cpu_state *cpu, struct tlb *tlb) {
     struct fiber_block *block = state.block;
     struct fiber_frame frame = {.cpu = *cpu};
     int interrupt = fiber_enter(block, &frame, tlb);
+    bool live_poked = cpu->_poked;
     *cpu = frame.cpu;
+    cpu->_poked = live_poked;
     fiber_block_free(NULL, block);
     if (interrupt == INT_NONE)
         interrupt = INT_DEBUG;
