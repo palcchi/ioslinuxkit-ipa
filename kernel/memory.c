@@ -217,6 +217,7 @@ void mem_destroy(struct mem *mem) {
         free(r);
     }
     asbestos_free(mem->mmu.asbestos);
+    mem->mmu.asbestos = NULL;
     pt_node_free(mem->pgdir, 0);
     mem->pgdir = NULL;
     write_wrunlock(&mem->lock);
