@@ -581,52 +581,38 @@ __no_instrument int c_stp32(struct tlb *tlb, addr_t addr, uint32_t val1, uint32_
 }
 
 // STXP/STLXP pair compare-and-store helper.
-// Returns 0 on success, 1 on exclusive-store failure, -1 on segfault/unsupported size.
+// Returns 0 on success, 1 on exclusive-store failure, -1 on fault.
 __no_instrument int c_stxp_pair(struct tlb *tlb, addr_t addr,
                                 uint64_t expected_lo, uint64_t expected_hi,
                                 uint64_t new_lo, uint64_t new_hi,
                                 uint32_t size) {
-    // A 64-bit register pair is a 16-byte exclusive access and must be
-    // naturally aligned. Report a guest fault instead of relying on a host
-    // unaligned atomic fallback.
-    if (size == 3 && (addr & 0xf))
+    void *ptr = __tlb_write_ptr(tlb, addr);
+    if (ptr == NULL)
         return -1;
 
-    int result = -1;
-
-    lock(&pair_atomic_lock);
     if (size == 2) {
-        void *ptr1 = __tlb_write_ptr(tlb, addr);
-        void *ptr2 = __tlb_write_ptr(tlb, addr + 4);
-        if (ptr1 != NULL && ptr2 != NULL) {
-            uint32_t cur_lo = *(uint32_t *)ptr1;
-            uint32_t cur_hi = *(uint32_t *)ptr2;
-            if (cur_lo == (uint32_t)expected_lo && cur_hi == (uint32_t)expected_hi) {
-                *(uint32_t *)ptr1 = (uint32_t)new_lo;
-                *(uint32_t *)ptr2 = (uint32_t)new_hi;
-                result = 0;
-            } else {
-                result = 1;
-            }
-        }
-    } else if (size == 3) {
-        void *ptr1 = __tlb_write_ptr(tlb, addr);
-        void *ptr2 = __tlb_write_ptr(tlb, addr + 8);
-        if (ptr1 != NULL && ptr2 != NULL) {
-            uint64_t cur_lo = *(uint64_t *)ptr1;
-            uint64_t cur_hi = *(uint64_t *)ptr2;
-            if (cur_lo == expected_lo && cur_hi == expected_hi) {
-                *(uint64_t *)ptr1 = new_lo;
-                *(uint64_t *)ptr2 = new_hi;
-                result = 0;
-            } else {
-                result = 1;
-            }
-        }
+        if (addr & 7)
+            return -1;
+        uint64_t expected = (uint32_t)expected_lo |
+                ((uint64_t)(uint32_t)expected_hi << 32);
+        uint64_t desired = (uint32_t)new_lo |
+                ((uint64_t)(uint32_t)new_hi << 32);
+        return __atomic_compare_exchange_n((uint64_t *)ptr, &expected, desired,
+                                           false, __ATOMIC_SEQ_CST,
+                                           __ATOMIC_SEQ_CST) ? 0 : 1;
     }
-    unlock(&pair_atomic_lock);
 
-    return result;
+    if (size == 3) {
+        if ((addr & 0xf) || PGOFFSET(addr) + 16 > PAGE_SIZE)
+            return -1;
+        __uint128_t expected = ((__uint128_t)expected_hi << 64) | expected_lo;
+        __uint128_t desired = ((__uint128_t)new_hi << 64) | new_lo;
+        return __atomic_compare_exchange_n((__uint128_t *)ptr, &expected, desired,
+                                           false, __ATOMIC_SEQ_CST,
+                                           __ATOMIC_SEQ_CST) ? 0 : 1;
+    }
+
+    return -1;
 }
 
 // CASP/CASPA/CASPL/CASPAL helper. *old_lo/*old_hi enter with the expected
