@@ -8,6 +8,7 @@
 #include <setjmp.h>
 #include <errno.h>
 #include <time.h>
+#include <stdio.h>
 #include "misc.h"
 #include "debug.h"
 
