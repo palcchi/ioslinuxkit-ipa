@@ -358,26 +358,26 @@ dword_t sys_madvise(addr_t addr, dword_t len, dword_t advice) {
         return 0;
 
     if (advice == 4 /* MADV_DONTNEED */) {
-        // MADV_DONTNEED: the next access must see zero-fill. Zeroing the host
-        // backing in place is only safe if concurrent readers on other threads
-        // re-check coherence — so bump mmu->changes (via mem_changed) so their
-        // per-block / per-access TLB coherence check forces a re-translate
-        // rather than reading the half-zeroed page through a stale entry.
+        // Anonymous private pages become zero-fill. File-backed private pages
+        // must retain their file contents; zeroing those corrupts mapped
+        // executables and caches. Walk under a read lock and skip lazy pages so
+        // exit cannot hang behind repeated per-page write-lock acquisition.
         addr_t end = addr + len;
         bool any = false;
+        read_wrlock(&current->mem->lock);
         for (addr_t p = addr; p < end; p += PAGE_SIZE) {
-            write_wrlock(&current->mem->lock);
-            if (mem_pt(current->mem, PAGE(p)) == NULL) {
-                write_wrunlock(&current->mem->lock);
+            struct pt_entry *pt = mem_pt(current->mem, PAGE(p));
+            if (pt == NULL || pt->data == NULL)
                 continue;
-            }
+            if (!(pt->flags & P_ANONYMOUS) && pt->data->fd != NULL)
+                continue;
             void *ptr = mem_ptr(current->mem, p, MEM_WRITE);
             if (ptr != NULL) {
                 memset(ptr, 0, PAGE_SIZE);
                 any = true;
             }
-            write_wrunlock(&current->mem->lock);
         }
+        read_wrunlock(&current->mem->lock);
         if (any)
             mem_changed_pub(current->mem);
     }
