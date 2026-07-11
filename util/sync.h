@@ -166,10 +166,15 @@ static inline void __write_wrlock(wrlock_t *lock, const char *file, int line) {
     // itself waiting on those threads to reach a GC safepoint, the whole VM
     // deadlocks (observed intermittently in claude-cli startup). Spinning
     // keeps readers live so they can progress and release, letting the writer
-    // eventually win a trylock.
-    struct timespec _ts = {0, 1000}; // 1us backoff
-    while (pthread_rwlock_trywrlock(&lock->l) != 0)
-        nanosleep(&_ts, NULL);
+    // eventually win a trylock. Back off from 1us to a steady 100us sleep;
+    // never fall back to blocking pthread_rwlock_wrlock().
+    long pause_ns = 1000;
+    while (pthread_rwlock_trywrlock(&lock->l) != 0) {
+        const struct timespec pause = { .tv_sec = 0, .tv_nsec = pause_ns };
+        nanosleep(&pause, NULL);
+        if (pause_ns < 100000)
+            pause_ns *= 2;
+    }
     assert(lock->val == 0);
     lock->val = -1;
     lock->file = file;
