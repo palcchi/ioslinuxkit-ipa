@@ -586,6 +586,12 @@ __no_instrument int c_stxp_pair(struct tlb *tlb, addr_t addr,
                                 uint64_t expected_lo, uint64_t expected_hi,
                                 uint64_t new_lo, uint64_t new_hi,
                                 uint32_t size) {
+    // A 64-bit register pair is a 16-byte exclusive access and must be
+    // naturally aligned. Report a guest fault instead of relying on a host
+    // unaligned atomic fallback.
+    if (size == 3 && (addr & 0xf))
+        return -1;
+
     int result = -1;
 
     lock(&pair_atomic_lock);
@@ -630,6 +636,9 @@ __no_instrument int c_casp_pair(struct tlb *tlb, addr_t addr,
                                 uint64_t *old_lo, uint64_t *old_hi,
                                 uint64_t new_lo, uint64_t new_hi,
                                 uint32_t size) {
+    if (size == 3 && (addr & 0xf))
+        return -1;
+
     int result = -1;
 
     lock(&pair_atomic_lock);
