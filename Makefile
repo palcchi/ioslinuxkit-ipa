@@ -28,6 +28,7 @@ help:
 	@echo "  make build-arm64-linux              Build release Linux host binary"
 	@echo "  make build-arm64-linux-debug        Build debug Linux host binary"
 	@echo "  make build-arm64-linux-all          Build release + debug"
+	@echo "  make check-docs                     Check local Markdown links"
 	@echo "  make test-arm64-runtime-coverage    Run staged C/Go/Bun/Node/Python/Lua/Java/Clojure/PyPy/Swift/Rust/Erlang/Zig coverage"
 	@echo "  make test-arm64-runtime-coverage-debug"
 	@echo "                                      Run coverage against debug binary"
@@ -44,6 +45,10 @@ help:
 	@echo "  make perf-bench                      Pinned multi-run benchmark (p5/p50/p95)"
 	@echo ""
 	@echo "Knobs: ROOTFS_DIR=$(ROOTFS_DIR) DEBIAN_ROOTFS_DIR=$(DEBIAN_ROOTFS_DIR) ROOTFS_LANES=$(ROOTFS_LANES) CLI_PACKAGE_MANAGERS=$(CLI_PACKAGE_MANAGERS) REPORT_DIR=$(REPORT_DIR) TIMEOUT_S=$(TIMEOUT_S) INSTALL_TIMEOUT_S=$(INSTALL_TIMEOUT_S) PERF_RUNS=$(PERF_RUNS) PERF_CPU=$(PERF_CPU)"
+
+.PHONY: check-docs
+check-docs:
+	bun scripts/check-markdown-links.ts
 
 .PHONY: build-arm64-linux
 build-arm64-linux:

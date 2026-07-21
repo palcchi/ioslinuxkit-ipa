@@ -1,5 +1,7 @@
 # OpenMinis `ish-arm64` audit — 2026-07-20
 
+> **Dated report:** This audit applies to `rcarmo/ios-linuxkit` commit `35dac743` and OpenMinis refs observed on 20 July 2026. Later commits require a new comparison.
+
 ## Scope
 
 Compared `rcarmo/ios-linuxkit` `origin/master` (`312f1093`) with every live ref in

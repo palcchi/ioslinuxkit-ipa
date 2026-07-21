@@ -1,5 +1,7 @@
 # ios-linuxkit ARM64 smoke issues and syscall coverage appraisal
 
+> **Dated report:** Counts and syscall classifications in this May 2026 audit apply to the source and rootfs used then. Use [the maintained validation guide](../../VALIDATION.md) for current gates.
+
 Updated: 2026-05-20
 
 ## Executive status

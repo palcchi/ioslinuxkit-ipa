@@ -1,4 +1,4 @@
-> **Provenance:** Preserved Chinese upstream iSH README from [ish-app/ish](https://github.com/ish-app/ish), as carried by the pre-rebrand `ish-arm64` fork. Archived under `docs/legacy/` during the `ios-linuxkit` rebrand on 2026-05-16.
+> **Historical document:** Preserved Chinese upstream iSH README from [ish-app/ish](https://github.com/ish-app/ish), as carried by the pre-rebrand fork. Its build instructions describe upstream iSH, not current `ios-linuxkit`. Use the [maintained documentation index](../README.md).
 >
 
 # [iSH](https://ish.app)

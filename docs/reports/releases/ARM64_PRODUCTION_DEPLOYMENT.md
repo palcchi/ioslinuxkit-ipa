@@ -1,5 +1,7 @@
 # ios-linuxkit ARM64 production deployment notes
 
+> **Dated report:** This file records a May 2026 local staging artefact. Its paths and revisions are obsolete. Use [the maintained iOS guide](../../IOS_APPLICATION.md) for the current release boundary.
+
 Date: 2026-05-12
 Reviewed: 2026-05-20
 

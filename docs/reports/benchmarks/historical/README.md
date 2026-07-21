@@ -1,6 +1,6 @@
 # Historical benchmark reports
 
-These reports are preserved for provenance and historical comparison. They are not the current `ios-linuxkit` runtime gate; use [../RUNTIME_VALIDATION.md](../RUNTIME_VALIDATION.md) for current validation status.
+These reports are preserved for provenance and historical comparison. They are not the current `ios-linuxkit` runtime gate; use [current validation guidance](../../../VALIDATION.md).
 
 | File | Provenance |
 |---|---|

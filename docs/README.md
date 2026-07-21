@@ -1,30 +1,35 @@
-# ios-linuxkit documentation
+# Documentation
 
-This directory holds project documentation. The top-level README is the product summary; this directory keeps validation, architecture, workload, and provenance details.
+The maintained documentation describes the current `master` branch. Dated evidence and superseded instructions are kept under `reports/` and `legacy/`.
 
-## Start here
+## Maintained guides
 
-| File | Purpose |
+| File | Subject |
 |---|---|
-| [RUNTIME_VALIDATION.md](RUNTIME_VALIDATION.md) | Test gates, commands, report paths, coverage areas, and failure rules. |
-| [ARM64_WORKLOAD_SMOKE_TESTS.md](ARM64_WORKLOAD_SMOKE_TESTS.md) | Workload matrix for language runtimes, package managers, CLIs, and Benchmarks Game rows. |
-| [ARM64_BACKEND.md](ARM64_BACKEND.md) | ARM64 guest backend architecture inherited from `ish-arm64`. |
-| [LINUX_BUILD_AND_HOST_ABI.md](LINUX_BUILD_AND_HOST_ABI.md) | Linux-host build and platform abstraction notes. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | ARM64 decoder, gadget interpreter, memory model, userspace kernel and host boundaries. |
+| [LINUX_DEVELOPMENT.md](LINUX_DEVELOPMENT.md) | AArch64 Linux build, fakefs, command-line use and diagnostics. |
+| [IOS_APPLICATION.md](IOS_APPLICATION.md) | Xcode schemes, rootfs packaging, signing boundary and embedding interfaces. |
+| [VALIDATION.md](VALIDATION.md) | Build and runtime gates, focused fixtures, reports and failure rules. |
+| [LIMITATIONS.md](LIMITATIONS.md) | Security model, compatibility shims, incomplete facilities and unsupported workloads. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Source, test and documentation requirements for changes. |
 
-## Reports and ledgers
+## Reports
 
-| Area | Files |
+Reports record a result at a named date or revision. Paths, package versions and pass counts in these files may be obsolete.
+
+| Directory | Contents |
 |---|---|
-| Runtime/syscall issue ledger | [ARM64_SMOKE_ISSUES_AND_SYSCALL_COVERAGE.md](ARM64_SMOKE_ISSUES_AND_SYSCALL_COVERAGE.md) |
-| Production baseline | [ARM64_PRODUCTION_BASELINE.md](ARM64_PRODUCTION_BASELINE.md), [ARM64_PRODUCTION_DEPLOYMENT.md](ARM64_PRODUCTION_DEPLOYMENT.md) |
-| Benchmarks Game | [BENCHMARKSGAME_HARNESS.md](BENCHMARKSGAME_HARNESS.md), [BENCHMARKSGAME_MATRIX.md](BENCHMARKSGAME_MATRIX.md), per-language `BENCHMARKSGAME_*_SMOKE.md` reports |
-| Historical benchmark reports | [benchmark/](benchmark/) |
-| go-gte workload | [GO_GTE_PROGRESS.md](GO_GTE_PROGRESS.md) |
+| [reports/audits/](reports/audits/) | Source and upstream comparison audits. |
+| [reports/benchmarks/game/](reports/benchmarks/game/) | Benchmarks Game harness and per-language results. |
+| [reports/benchmarks/historical/](reports/benchmarks/historical/) | Retired x86/ARM64 compatibility and performance comparisons. |
+| [reports/releases/](reports/releases/) | Previous production baseline and staging records. |
+| [reports/workloads/](reports/workloads/) | Workload investigations such as `go-gte`. |
 
 ## Provenance
 
-| Material | Location |
-|---|---|
-| Original iSH README material | [ORIGINAL_ISH_README.md](ORIGINAL_ISH_README.md) |
-| Localized upstream README files | [legacy/](legacy/) |
-| Repository root exceptions | `README.md`, `LICENSE.md`, `SECURITY.md`, `ISSUE_TEMPLATE.md`, generated `fastlane/README.md`, and executable skill manifests under `.pi/skills/*/SKILL.md`. |
+- [legacy/ORIGINAL_ISH_README_2026-05.md](legacy/ORIGINAL_ISH_README_2026-05.md) preserves the pre-rewrite fork README and its embedded upstream material.
+- [legacy/](legacy/) also contains upstream translations and the superseded May 2026 Chinese backend guide.
+- [SECURITY.md](../SECURITY.md) defines the security model.
+- [LICENSE.md](../LICENSE.md) and [LICENSE.IOS](../LICENSE.IOS) contain licence terms.
+
+Generated `fastlane/README.md` and executable `.pi/skills/*/SKILL.md` files are tool inputs, not project guides.

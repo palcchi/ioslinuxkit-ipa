@@ -2,7 +2,7 @@
 
 Status: active workload gate for the currently feasible Alpine aarch64 rows.
 
-Primary design document: [ARM64_WORKLOAD_SMOKE_TESTS.md](ARM64_WORKLOAD_SMOKE_TESTS.md).
+> **Dated report:** This file records the May 2026 Benchmarks Game harness. Use [current validation guidance](../../../VALIDATION.md) for maintained gates.
 
 This directory contains the repeatable harnesses that turn the Benchmarks Game corpus into ios-linuxkit ARM64 smoke tests. The active shape is:
 
@@ -22,7 +22,7 @@ Generate the full official-language matrix with:
 tests/arm64/benchmarksgame/generate-matrix.py
 ```
 
-The output is committed at `docs/BENCHMARKSGAME_MATRIX.md` so changes in the upstream Benchmarks Game site are visible in diffs.
+The output is committed at [`BENCHMARKSGAME_MATRIX.md`](BENCHMARKSGAME_MATRIX.md) so changes in the upstream Benchmarks Game site are visible in diffs.
 
 ## GCC execution row
 

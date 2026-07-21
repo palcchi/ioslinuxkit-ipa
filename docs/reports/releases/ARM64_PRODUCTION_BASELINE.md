@@ -1,5 +1,7 @@
 # ios-linuxkit ARM64 production baseline
 
+> **Dated report:** This baseline describes the May 2026 `go` branch and package set. It is not the current `master` release procedure. Use [the maintained iOS guide](../../IOS_APPLICATION.md) and [validation guide](../../VALIDATION.md).
+
 Date: 2026-05-10
 Reviewed: 2026-06-09
 

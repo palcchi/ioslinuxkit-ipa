@@ -1,4 +1,4 @@
-> **Provenance:** Preserved upstream/fork README material from [ish-app/ish](https://github.com/ish-app/ish), as carried by the pre-rebrand `ish-arm64` fork. Archived under `docs/` during the `ios-linuxkit` rebrand on 2026-05-16.
+> **Historical document:** Preserved upstream/fork README material from [ish-app/ish](https://github.com/ish-app/ish), as carried by the pre-rebrand `ish-arm64` fork and archived during the May 2026 rebrand. Its performance, instruction-coverage, integration and product claims have not been verified for current `master`. Use the [maintained documentation index](../README.md).
 >
 
 # [iSH](https://ish.app)
@@ -32,8 +32,8 @@
 > **Historical pre-cleanup performance (ARM64 vs x86, compute-heavy):** C `int_arith_2M` **12x faster**,
 > Python `fib(30)` **9.2x faster**, `sum(1M)` **10.2x faster**, shell `seq+awk 100K` **7.2x faster**.
 >
-> **Full docs:** [ARM64 backend](ARM64_BACKEND.md) · [中文版](ARM64_BACKEND_ZH.md) ·
-> [Performance report](benchmark/BENCHMARK_PERF.md) · [Compatibility report](benchmark/BENCHMARK_COMPAT.md)
+> **Current fork docs:** [architecture](../ARCHITECTURE.md) · [Linux development](../LINUX_DEVELOPMENT.md) ·
+> [historical performance report](../reports/benchmarks/historical/BENCHMARK_PERF.md) · [historical compatibility report](../reports/benchmarks/historical/BENCHMARK_COMPAT.md)
 >
 > ---
 

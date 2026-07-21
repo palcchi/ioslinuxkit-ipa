@@ -1,5 +1,7 @@
 # ios-linuxkit ARM64 后端 — 通过原生 threaded-code 解释器在 iOS 上运行 Linux
 
+> **历史文档：** 本页保留 2026 年 5 月的中文说明，其中的用户数量、完整指令覆盖、分支状态、命令和结果未按当前 `master` 验证。当前英文说明见 [架构](../ARCHITECTURE.md)、[验证](../VALIDATION.md) 和 [限制](../LIMITATIONS.md)。
+
 **Fork 自 [ish-app/ish](https://github.com/ish-app/ish)** — iOS 上的用户态 Linux 模拟器。
 
 本 fork 在上游 iSH 的 threaded-code 解释器（**Asbestos**，2024 年之前叫 *jit*，上游重命名是因为
@@ -23,7 +25,7 @@
 > ARM64 host 指令——同架构分派，每条 guest 指令只需几条 host 指令。上游 x86 后端依然并存。
 > 下文部分地方用 "JIT" 作为简写，请理解为"同架构 gadget 分派"，而非运行时代码生成。
 >
-> 英文版: [ARM64_BACKEND.md](ARM64_BACKEND.md)
+> 当前英文版: [ARCHITECTURE.md](../ARCHITECTURE.md)
 
 ---
 
@@ -218,7 +220,7 @@ ninja -C build-arm64-release
 
 下面的 x86-vs-ARM64 数字来自 ARM64-only 清理之前的历史对比 harness，在 macOS 26.4.1 /
 Apple Silicon 上用 guest 内置计时（排除启动开销）。该 harness 已经随 x86 后端一起退役；完整历史数据见
-**[benchmark/BENCHMARK_PERF.md](benchmark/BENCHMARK_PERF.md)**。
+**[历史性能报告](../reports/benchmarks/historical/BENCHMARK_PERF.md)**。
 
 ### 相对原生的开销（按负载类型）
 
@@ -246,9 +248,8 @@ Apple Silicon 上用 guest 内置计时（排除启动开销）。该 harness �
 
 历史兼容性对比覆盖 205 项测试、18 个分类（基础 OS、文件操作、文本处理、构建、Python、Node.js、
 Go/Rust/Perl/…、网络、VCS、编辑器、Shell、数据库、多媒体、加密、系统监控、调试、
-包管理、信号）。完整历史报告见 **[benchmark/BENCHMARK_COMPAT.md](benchmark/BENCHMARK_COMPAT.md)**。
-当前验证入口是 [RUNTIME_VALIDATION.md](RUNTIME_VALIDATION.md) 和
-[ARM64_WORKLOAD_SMOKE_TESTS.md](ARM64_WORKLOAD_SMOKE_TESTS.md) 中的 ARM64 runtime/workload smoke gates。
+包管理、信号）。完整历史报告见 **[历史兼容性报告](../reports/benchmarks/historical/BENCHMARK_COMPAT.md)**。
+当前验证入口是 [VALIDATION.md](../VALIDATION.md)。
 
 | 架构 | 通过 | 失败 | 通过率 |
 |---|:---:|:---:|:---:|
@@ -353,4 +354,4 @@ iSH/
 
 ## 许可
 
-与上游 iSH 相同。见 [LICENSE](../LICENSE.md)。
+与上游 iSH 相同。见 [LICENSE](../../LICENSE.md)。

@@ -1,6 +1,6 @@
 # go-gte progress on ios-linuxkit ARM64
 
-See also: [ARM64 workload smoke tests](ARM64_WORKLOAD_SMOKE_TESTS.md), the central index for workload rationale and latest results.
+> **Dated report:** This file records the May 2026 `go-gte` investigation. Use [current validation guidance](../../VALIDATION.md) for maintained test commands.
 
 Date: 2026-05-02
 Updated: 2026-05-03 05:58 UTC
