@@ -32,6 +32,7 @@ help:
 	@echo "  make test-arm64-runtime-coverage    Run staged C/Go/Bun/Node/Python/Lua/Java/Clojure/PyPy/Swift/Rust/Erlang/Zig coverage"
 	@echo "  make test-arm64-runtime-coverage-debug"
 	@echo "                                      Run coverage against debug binary"
+	@echo "  make test-arm64-fcvt-vector        Run focused AdvSIMD FP widen/narrow conversions"
 	@echo "  make test-arm64-internal-continue-fixtures"
 	@echo "                                      Run opt-in ARM64 internal-continue first-call-site fixtures"
 	@echo "  make test-arm64-cli-corner-smoke   Run optional CLI/TUI/network/container corner-case smoke tests"
@@ -132,6 +133,14 @@ perf-bench: build-arm64-linux
 	HEAVY_TIMEOUT_S="$(HEAVY_TIMEOUT_S)" \
 	REPORT_DIR="$(REPORT_DIR)" \
 	./tests/arm64/perf-bench.sh
+
+.PHONY: test-arm64-fcvt-vector
+test-arm64-fcvt-vector: build-arm64-linux $(DEBIAN_ROOTFS_DIR)
+	CC="$(CC)" \
+	ISH_BIN="$(CURDIR)/$(RELEASE_BUILD_DIR)/ish" \
+	ROOTFS="$(DEBIAN_ROOTFS_DIR)" \
+	TIMEOUT_S="$(TIMEOUT_S)" \
+	./tests/arm64/fp/run-fcvt-vector.sh
 
 .PHONY: test-arm64-internal-continue-fixtures
 test-arm64-internal-continue-fixtures: build-arm64-linux

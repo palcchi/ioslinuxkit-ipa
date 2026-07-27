@@ -78,3 +78,23 @@ Host: Orange Pi 6 Plus, CIX P1, Debian Trixie, AArch64.
 GNU `as` rejects the tree's existing named-register `.req` syntax; this was
 reproduced on untouched `origin/master`. Clang's integrated assembler is the
 project's configured/default ARM64 toolchain and builds cleanly.
+
+## Follow-up — OpenMinis issue #22
+
+Reviewed issue #22 on 21–27 July 2026. Its `FCVTL`/`FCVTL2` request was already
+implemented, and the reported `0x2e617800` opcode is `FCVTL`, not `FCVTXN`.
+The missing instructions were:
+
+- `FCVTN`/`FCVTN2`, single-to-half and double-to-single
+- `FCVTXN`/`FCVTXN2`, double-to-single round-to-odd
+
+The follow-up adds exact decoders and native gadgets, tightens the existing
+`FCVTL` mask so reserved or other size encodings are not claimed, and runs
+these conversions with guest `FPCR`/`FPSR` while restoring host thread state.
+
+`make test-arm64-fcvt-vector` builds one static fixture and runs it first on the
+AArch64 host as the architectural oracle, then under iSH. It covers both vector
+halves, destination/source aliasing, lower-half zeroing, upper-half
+preservation, guest rounding mode, cumulative `FPSR.IXC`, widening, and decoder
+mask collisions. Clean Clang release and debug builds and the focused gate pass
+on the Orange Pi 6 Plus.
