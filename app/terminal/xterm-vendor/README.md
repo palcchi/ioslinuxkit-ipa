@@ -1,6 +1,6 @@
 # Vendored xterm.js runtime
 
-This directory vendors the browser runtime used by `@rcarmo/piclaw-addon-lite-term` so low-spec Piclaw deployments do not depend on core Ghostty/WASM assets.
+This directory contains the optional xterm.js renderer bundled with `ios-linuxkit`. Builds that include `app/XtermRenderer.xcconfig` load `xterm-term.html`; the default ARM64 app uses the Ghostty Web renderer.
 
 Vendored packages:
 
@@ -19,4 +19,4 @@ Vendored packages:
 - `@xterm/addon-web-links` 0.12.0
 - `@xterm/addon-webgl` 0.19.0
 
-All are MIT licensed by the xterm.js authors. Piclaw provides the terminal font assets; this add-on only vendors xterm runtime code and CSS.
+All packages are MIT licensed by the xterm.js authors. `VENDORED.txt` records the source, date, bundle construction and renderer switch. [`LICENSES.md`](LICENSES.md) records the licence notice.

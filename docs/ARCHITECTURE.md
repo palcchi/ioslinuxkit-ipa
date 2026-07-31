@@ -39,7 +39,9 @@ The word `jit` survives in internal identifiers such as `jit_saved_pc` and `jit_
 | `asbestos/guest-arm64/gadgets-aarch64/crypto.S` | Implemented cryptographic instructions. |
 | `asbestos/asbestos.c` | Block cache, chaining, invalidation and executor diagnostics. |
 
-Instruction coverage is incomplete. A decoder match and a native-looking gadget do not by themselves establish architectural correctness; each added instruction needs an executable guest fixture, including width, aliasing, alignment, flags and exceptional cases that apply.
+Instruction coverage is incomplete. A decoder match and a native-looking gadget do not establish architectural correctness on their own; each added instruction needs an executable guest fixture, including width, aliasing, alignment, flags and exceptional cases that apply.
+
+Floating-point conversion gadgets that depend on the guest control or status registers save the host thread's `FPCR` and `FPSR`, load `cpu_state`'s guest values, execute the native instruction, copy cumulative exceptions back to the guest `FPSR`, then restore the host values. The current implementation applies this hand-off to `FCVTN`/`FCVTN2`, `FCVTL`/`FCVTL2` and `FCVTXN`/`FCVTXN2`. [`tests/arm64/fp/`](../tests/arm64/fp/) checks rounding, exception flags, vector halves, source/destination aliasing and decoder masks.
 
 ## Address space and memory
 

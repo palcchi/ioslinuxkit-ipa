@@ -12,6 +12,7 @@ The maintained documentation describes the current `master` branch. Dated eviden
 | [VALIDATION.md](VALIDATION.md) | Build and runtime gates, focused fixtures, reports and failure rules. |
 | [LIMITATIONS.md](LIMITATIONS.md) | Security model, compatibility shims, incomplete facilities and unsupported workloads. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Source, test and documentation requirements for changes. |
+| [RELEASES.md](RELEASES.md) | App versions, Apple build numbers, Git tags and release checks. |
 
 ## Reports
 
@@ -32,4 +33,4 @@ Reports record a result at a named date or revision. Paths, package versions and
 - [SECURITY.md](../SECURITY.md) defines the security model.
 - [LICENSE.md](../LICENSE.md) and [LICENSE.IOS](../LICENSE.IOS) contain licence terms.
 
-Generated `fastlane/README.md` and executable `.pi/skills/*/SKILL.md` files are tool inputs, not project guides.
+Generated `fastlane/README.md` and executable `.pi/skills/*/SKILL.md` files are tool inputs, not project guides. Vendored component notes under `app/terminal/` describe only the bundled third-party assets at their named revisions.

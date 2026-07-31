@@ -1,7 +1,19 @@
-# iSH is not a security boundary!
+# Security model
 
-The goal of this project is to support a Linux shell on iOS. As such, its security model assumes that the app is running in another sandbox and is used by a single user. The project is focused on compatibility, and very little thought has been put into internal security. Permissions are only loosely checked. Memory corruption in edge cases is common. Please do not use iSH for any sort of secure containerization or production use case.
+`ios-linuxkit` runs Linux-compatible guest code inside one application process. The outer iOS sandbox is the security boundary; guest users, permissions and memory mappings do not isolate hostile code from the host application.
 
-As such, most types of bugs that are security issues in most projects are not security issues in iSH. Insufficient permission checks, memory corruption, and thread safety issues are generally considered correctness bugs and would be best filed as GitHub issues. We will prioritize bugs encountered by real programs in typical use.
+The runtime contains a large C and AArch64 assembly codebase. Memory corruption, permission-check gaps and thread-safety defects are correctness bugs unless they cross the outer sandbox or trigger host-side effects without user consent. Do not use the runtime as a secure container or expose it directly to untrusted workloads.
 
-In our security model, we expect real security bugs to be very rare. It's not completely impossible, e.g. a bug allowing remote code execution without user consent would be a security bug. If you think you found one, you can send it to security@ish.app. We'll work with you to resolve it appropriately.
+Host integrations widen guest access:
+
+- realfs and fakefs bind mounts expose selected host-sandbox paths;
+- native offload handlers receive guest-controlled arguments and execute as host code;
+- spawned native mappings execute host programs outside instruction emulation.
+
+Validate paths, arguments and data at each integration boundary.
+
+Report ordinary crashes, illegal instructions, syscall defects and compatibility failures through the repository's [GitHub issues](https://github.com/rcarmo/ios-linuxkit/issues). Include the source revision, host or iOS version, rootfs, reproduction command, exit status and relevant diagnostics.
+
+This fork does not currently enable GitHub private vulnerability reporting. For a report that cannot safely be public, email [rui@carmo.io](mailto:rui@carmo.io) and request a private channel. Do not attach exploit details, credentials or private user data to a public issue.
+
+The upstream iSH policy and contact details apply to upstream iSH releases, not automatically to this fork.

@@ -4,7 +4,7 @@
 
 `ios-linuxkit` runs an AArch64 Linux userland inside an iOS app and as a command-line process on an AArch64 Linux host. It derives from [iSH](https://ish.app/) and uses iSH's userspace kernel, filesystems and Asbestos threaded-code interpreter.
 
-The repository supports one guest architecture: ARM64. The interpreter decodes guest instructions into programs of pointers to precompiled host functions. All executable host instructions come from the built application; the interpreter allocates only data for translated programs.
+The current source version is **2.1.0** with Apple build number **806**. The repository supports one guest architecture: ARM64. The interpreter decodes guest instructions into programs of pointers to precompiled host functions. All executable host instructions come from the built application; the interpreter allocates only data for translated programs.
 
 ## What is in the repository
 
@@ -21,7 +21,9 @@ The iOS app is a reference terminal and packaging target. The outer iOS sandbox 
 Install Clang, Meson, Ninja, pkg-config, SQLite development files and libarchive development files. On Debian or Ubuntu:
 
 ```sh
-sudo apt install clang meson ninja-build pkg-config libsqlite3-dev libarchive-dev
+sudo apt install \
+  clang make meson ninja-build pkg-config git curl file tar \
+  libsqlite3-dev libarchive-dev
 ```
 
 Clone the submodules and build:
@@ -57,6 +59,7 @@ curl -LO https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-min
 | Build release | `make build-arm64-linux` |
 | Build release and debug | `make build-arm64-linux-all` |
 | Check documentation links | `make check-docs` |
+| Test AdvSIMD FP widening and narrowing | `CC=clang make test-arm64-fcvt-vector` |
 | Run staged runtime coverage | `make test-arm64-runtime-coverage` |
 | Run coverage with the debug binary | `make test-arm64-runtime-coverage-debug` |
 | Run CLI corner cases | `make test-arm64-cli-corner-smoke` |
@@ -65,7 +68,7 @@ curl -LO https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-min
 
 The runtime and CLI targets can install packages into their fakefs. Use a disposable copy when package state matters. Reports are written to `REPORT_DIR`, which defaults to `/workspace/tmp`.
 
-The latest audited `master` result is recorded in [the July 2026 OpenMinis audit](docs/reports/audits/OPENMINIS_AUDIT_2026-07-20.md): Clang release and debug builds passed, and all 47 focused C/ARM64 rows passed. One broad-suite Clojure row failed because the tested rootfs package did not contain `clojure.main`; the report does not present that run as a clean 83/83 gate.
+[The July 2026 OpenMinis audit](docs/reports/audits/OPENMINIS_AUDIT_2026-07-20.md) records the repository-wide comparison at `35dac743` and the AdvSIMD conversion follow-up at `40f1bf40`. The follow-up added `FCVTN`, `FCVTN2`, `FCVTXN` and `FCVTXN2`; clean Clang release and debug builds and the native-oracle/guest fixture passed. The earlier broad suite reached 82/83 because the tested rootfs Clojure package lacked `clojure.main`.
 
 ## Documentation
 
@@ -78,6 +81,7 @@ The latest audited `master` result is recorded in [the July 2026 OpenMinis audit
 | [Validation](docs/VALIDATION.md) | Test gates, reports and failure rules. |
 | [Limitations](docs/LIMITATIONS.md) | Security, compatibility and unsupported workloads. |
 | [Contributing](docs/CONTRIBUTING.md) | Change and documentation requirements. |
+| [Versioning and releases](docs/RELEASES.md) | App versions, build numbers, Git tags and release checks. |
 
 Dated benchmark, workload, release and audit records live under [`docs/reports/`](docs/reports/). They preserve their original observations and are not current operating instructions.
 

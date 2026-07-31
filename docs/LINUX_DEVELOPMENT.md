@@ -14,7 +14,7 @@ The Linux command-line build requires an AArch64 host because its gadget files c
 | OS | Debian Trixie |
 | Compiler used by the July 2026 audit | Clang 19.1.7 |
 
-The board details identify the measured host; they are not minimum requirements.
+The board details identify the measured host; they are not minimum requirements. The `test-arm64-fcvt-vector` gate also uses the host CPU as an AArch64 floating-point oracle.
 
 ## Dependencies
 
@@ -23,9 +23,14 @@ On Debian or Ubuntu:
 ```sh
 sudo apt install \
   clang \
+  make \
   meson \
   ninja-build \
   pkg-config \
+  git \
+  curl \
+  file \
+  tar \
   libsqlite3-dev \
   libarchive-dev
 ```
@@ -61,7 +66,7 @@ make build-arm64-linux-debug
 Build both variants with:
 
 ```sh
-make build-arm64-linux-all
+CC=clang make build-arm64-linux-all
 ```
 
 The outputs are:
@@ -137,6 +142,16 @@ ISH_BIND_MOUNTS='/mnt/src=/home/me/src:ro,/mnt/out=/tmp/out:rw' \
 ```
 
 Both paths must be absolute. The suffix defaults to read-write; use `:ro` for a read-only mount.
+
+## Focused AdvSIMD conversion test
+
+The focused conversion gate builds one static AArch64 fixture on the host, runs it natively, then runs the same binary under iSH:
+
+```sh
+CC=clang make test-arm64-fcvt-vector
+```
+
+The target uses `debian-arm64-fakefs` by default and creates that fakefs through the Makefile recipe when absent. The fixture itself is static and needs no guest compiler. It checks `FCVTN`/`FCVTN2`, `FCVTL`/`FCVTL2` and `FCVTXN`/`FCVTXN2`, including guest rounding mode, cumulative floating-point exceptions, vector-half semantics and register aliasing.
 
 ## Diagnostics
 

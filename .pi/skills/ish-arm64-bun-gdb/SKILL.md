@@ -5,7 +5,7 @@ description: Debug Bun allocator/free-list corruption in the ARM64 iSH threaded-
 
 # iSH ARM64 Bun allocator GDB workflow
 
-Use this skill when Bun fails inside `/workspace/projects/ish-arm64` with allocator/free-list corruption, especially faults around:
+Use this skill when Bun fails inside `/workspace/projects/ish-arm64-go` with allocator/free-list corruption, especially faults around:
 
 ```text
 0x4899afc / 0x4899b00
@@ -17,7 +17,7 @@ Use this skill when Bun fails inside `/workspace/projects/ish-arm64` with alloca
 ## Repository and baseline
 
 ```bash
-cd /workspace/projects/ish-arm64
+cd /workspace/projects/ish-arm64-go
 git status --short --branch
 make build-arm64-linux-all
 ```
@@ -60,8 +60,8 @@ page fault on 0x... at 0x4899b00 (write)
 Use `tmux` so the session survives long runs and can be interrupted/inspected:
 
 ```bash
-cd /workspace/projects/ish-arm64
-tmux new-session -d -s bun-gdb -c /workspace/projects/ish-arm64 \
+cd /workspace/projects/ish-arm64-go
+tmux new-session -d -s bun-gdb -c /workspace/projects/ish-arm64-go \
   'gdb -q ./build-arm64-linux-debug/ish'
 tmux attach -t bun-gdb
 ```

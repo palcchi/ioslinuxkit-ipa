@@ -7,3 +7,5 @@ These files are preserved for attribution and historical context. They are not c
 | [README_ZH.md](README_ZH.md) | Chinese upstream iSH README, as carried by the pre-rebrand `ish-arm64` fork; archived here during the `ios-linuxkit` rebrand on 2026-05-16. |
 | [README_JP.md](README_JP.md) | Japanese upstream iSH README, as carried by the pre-rebrand `ish-arm64` fork; archived here during the `ios-linuxkit` rebrand on 2026-05-16. |
 | [README_KO.md](README_KO.md) | Korean upstream iSH README, as carried by the pre-rebrand `ish-arm64` fork; archived here during the `ios-linuxkit` rebrand on 2026-05-16. |
+| [ARM64_BACKEND_ZH_2026-05.md](ARM64_BACKEND_ZH_2026-05.md) | May 2026 Chinese backend description with unverified product and deployment claims; retained as a historical snapshot. |
+| [ORIGINAL_ISH_README_2026-05.md](ORIGINAL_ISH_README_2026-05.md) | Pre-rewrite fork README and embedded upstream material, retained for provenance. |

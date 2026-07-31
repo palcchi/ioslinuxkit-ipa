@@ -1,6 +1,6 @@
 # Validation
 
-Every runtime change needs a focused regression and a broader gate. The Makefile records the supported Linux-host workflows; each script writes a Markdown report under `REPORT_DIR`.
+Every runtime change needs a focused regression and a broader gate. The Makefile records the supported Linux-host workflows. Broad runtime, CLI and performance scripts write Markdown reports under `REPORT_DIR`; small instruction fixtures can report only their pass marker and exit status.
 
 ## Host and test data
 
@@ -20,6 +20,7 @@ This builds release and debug variants. Treat compiler errors, assembler errors 
 
 | Gate | Command | Scope |
 |---|---|---|
+| AdvSIMD FP conversions | `CC=clang make test-arm64-fcvt-vector` | Native AArch64 oracle plus guest widening/narrowing, FP state and decoder masks. |
 | Release runtime | `make test-arm64-runtime-coverage` | Shell, package manager, C fixtures and language runtimes. |
 | Debug runtime | `make test-arm64-runtime-coverage-debug` | Same suite with the debug binary. |
 | CLI corner cases | `make test-arm64-cli-corner-smoke` | TUI, DNS, HTTPS, Git, Docker probes and command-line packages. |
@@ -65,11 +66,12 @@ Standalone source fixtures live under:
 
 ```text
 tests/arm64/atomics/
+tests/arm64/fp/
 tests/arm64/loadstore/
 tests/arm64/signals/
 ```
 
-They cover CAS pairs, exclusive monitor clearing, exclusive widths, pair exclusives, `LDPSW` and per-thread alternate signal stacks. New instruction work should add a similarly small fixture and include it in a repeatable script or runtime row.
+They cover CAS pairs, exclusive monitor clearing, exclusive widths, pair exclusives, AdvSIMD floating-point conversions, `LDPSW` and per-thread alternate signal stacks. New instruction work should add a similarly small fixture and include it in a repeatable script or runtime row.
 
 A focused fixture should test architectural edge cases relevant to the instruction:
 
@@ -107,14 +109,12 @@ When a broad row fails, rerun its exact guest command with a bounded timeout. Pr
 
 ## Current evidence
 
-The latest repository-wide upstream audit is [`reports/audits/OPENMINIS_AUDIT_2026-07-20.md`](reports/audits/OPENMINIS_AUDIT_2026-07-20.md). At commit `35dac743` it records:
+[`reports/audits/OPENMINIS_AUDIT_2026-07-20.md`](reports/audits/OPENMINIS_AUDIT_2026-07-20.md) records two revisions:
 
-- Clang release and debug builds passing;
-- all 47 C/ARM64 runtime checks passing;
-- focused atomic, timer, epoll, `madvise`, signal and pidfd regressions passing;
-- two broad release runs at 82/83, with a transient Go result passing on retry and the remaining Clojure failure attributed to the tested rootfs package layout.
+- at `35dac743`, Clang release and debug builds, all 47 C/ARM64 rows, and focused atomic, timer, epoll, `madvise`, signal and pidfd regressions passed; two broad release runs reached 82/83 because the tested Clojure package lacked `clojure.main`;
+- at `40f1bf40`, clean Clang release and debug builds and `test-arm64-fcvt-vector` passed for `FCVTN`, `FCVTN2`, `FCVTL`, `FCVTL2`, `FCVTXN` and `FCVTXN2`.
 
-Older reports under `reports/` remain useful evidence for the code and environment they name. They do not override a later failed gate.
+The broad runtime suite depends on package-manager workers and live repositories. A package bootstrap failure precedes emulator rows and is recorded as an infrastructure failure, not an emulator pass or regression. Older reports under `reports/` apply only to the code and environment they name.
 
 ## Before commit
 
@@ -126,4 +126,4 @@ git diff --check
 git status --short
 ```
 
-Run the focused regression and the release runtime gate for behavioural changes. Use the debug gate for memory, signal, concurrency and translated-execution changes. Check Markdown links after moving documentation.
+Run the focused regression and the release runtime gate for behavioural changes. Use the debug gate for memory, signal, concurrency and translated-execution changes. Check Markdown links after moving documentation. Version or release changes must also follow [RELEASES.md](RELEASES.md).

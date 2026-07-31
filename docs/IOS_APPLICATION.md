@@ -1,6 +1,6 @@
 # iOS application
 
-The Xcode project contains two shared ARM64 application schemes. Both package the userspace Linux runtime and an AArch64 Alpine rootfs into an iOS application.
+The Xcode project contains two shared ARM64 application schemes. Both package the userspace Linux runtime and an AArch64 Alpine rootfs into an iOS application. The current shared version is 2.1.0 with Apple build number 806; [RELEASES.md](RELEASES.md) defines how to change them.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ Initialise submodules before opening the project:
 git submodule update --init --recursive
 ```
 
-Change the upstream default `ROOT_BUNDLE_IDENTIFIER` in `app/iSH.xcconfig` to an identifier owned by your team, then select an Apple development team before signing. The main target derives its bundle and app-group identifiers from that value; the FFmpeg target adds `.arm64.ffmpeg`. This repository does not contain credentials or provisioning profiles.
+Change the upstream default `ROOT_BUNDLE_IDENTIFIER` in `app/iSH.xcconfig` to an identifier owned by your team, then select an Apple development team before signing. The main `iSH-ARM64` target uses that root identifier; the FFmpeg target adds `.arm64.ffmpeg` to its bundle and app-group identifiers. This repository does not contain credentials or provisioning profiles.
 
 ## Schemes
 
@@ -38,7 +38,7 @@ xcodebuild \
   build
 ```
 
-The exact signing arguments depend on the developer account. A simulator build can use a simulator destination; device and archive builds require valid signing settings.
+The exact signing arguments depend on the developer account. A simulator build can use a simulator destination; device and archive builds require valid signing settings. These Xcode commands have not been run on the Debian validation host.
 
 ## Meson libraries
 
@@ -62,7 +62,7 @@ Ninja then builds and links:
 
 `app/download-root.sh` downloads the URL in `ROOTFS_URL` into the application bundle as `root.tar.gz`. Before accepting it, the script extracts `bin/busybox`, runs `file`, and verifies an AArch64 executable. A changed URL must still point to the architecture named by `ROOTFS_ARCH`.
 
-The build downloads from the network. Pin and review a new rootfs URL in `app/GuestARM64.xcconfig`; do not update package-version claims in documentation without testing the packaged image.
+The build downloads from the network. Pin and review a new rootfs URL in `app/GuestARM64.xcconfig`; update package-version statements only after testing the packaged image.
 
 ## Terminal frontend
 

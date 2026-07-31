@@ -20,7 +20,7 @@ Validate paths and arguments at the host boundary.
 
 Only an AArch64 guest is supported. `meson_options.txt` accepts only `arm64`, and `meson.build` rejects another guest architecture. The Linux command-line build also requires an AArch64 host for the precompiled AArch64 gadgets.
 
-Instruction support is broad enough for the tested workloads but incomplete. Unsupported or unrecognised encodings raise the guest undefined-instruction path. Claims such as “full NEON” or complete cryptographic-extension support are not warranted by the decoder alone.
+Instruction support is incomplete. Unsupported or unrecognised encodings raise the guest undefined-instruction path. The decoder includes many AdvSIMD and cryptographic operations, but no exhaustive architecture-conformance result exists.
 
 ## Linux facilities
 
