@@ -98,3 +98,27 @@ halves, destination/source aliasing, lower-half zeroing, upper-half
 preservation, guest rounding mode, cumulative `FPSR.IXC`, widening, and decoder
 mask collisions. Clean Clang release and debug builds and the focused gate pass
 on the Orange Pi 6 Plus.
+
+## Follow-up — upstream iSH `/proc/<pid>/mem` seek crash
+
+Reviewed `ish-app/ish` commit `297832fad03e318bcc10b9525da208902d5e9da7`
+(PR #2646) on 3 August 2026. It prevents a NULL callback in `proc_seek()` by
+adding an empty `.show` callback to `/proc/<pid>/mem`. That workaround was not
+cherry-picked: it routes the entry through `generic_seek()`, which incorrectly
+accepts `SEEK_END` using an empty generated-file size.
+
+The semantic port adds an optional per-entry proc seek callback. The mem entry
+uses the native Linux model: `SEEK_SET` replaces the raw signed 64-bit file
+position, `SEEK_CUR` performs wrapping 64-bit addition, and `SEEK_END` or an
+unknown `whence` returns `EINVAL` without changing the position. Other proc
+files retain their generated-data refresh and size-based generic seek path.
+
+`make test-arm64-proc-mem-seek` builds one static ARM64 fixture and runs
+identical bytes first against the native AArch64 kernel and then under iSH. The
+preserved fixture has SHA-256
+`53ac766ed0303e25d8baddac8365110677177b36578114de1b9dbf1f31b9688e`.
+Against the `v2.1.0` binary it exits 139 after a host SIGSEGV at address and PC
+`0x0`; against the fixed binary it reports `proc-mem-seek-ok`. The matrix covers
+positive and negative positions, the special `-1` raw-return case, arithmetic
+wrap at both signed limits, rejected `SEEK_END`, and position preservation after
+invalid requests.

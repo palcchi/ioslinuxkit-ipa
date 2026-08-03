@@ -33,6 +33,7 @@ help:
 	@echo "  make test-arm64-runtime-coverage-debug"
 	@echo "                                      Run coverage against debug binary"
 	@echo "  make test-arm64-fcvt-vector        Run focused AdvSIMD FP widen/narrow conversions"
+	@echo "  make test-arm64-proc-mem-seek      Run /proc/<pid>/mem native seek-semantics regression"
 	@echo "  make test-arm64-internal-continue-fixtures"
 	@echo "                                      Run opt-in ARM64 internal-continue first-call-site fixtures"
 	@echo "  make test-arm64-cli-corner-smoke   Run optional CLI/TUI/network/container corner-case smoke tests"
@@ -141,6 +142,14 @@ test-arm64-fcvt-vector: build-arm64-linux $(DEBIAN_ROOTFS_DIR)
 	ROOTFS="$(DEBIAN_ROOTFS_DIR)" \
 	TIMEOUT_S="$(TIMEOUT_S)" \
 	./tests/arm64/fp/run-fcvt-vector.sh
+
+.PHONY: test-arm64-proc-mem-seek
+test-arm64-proc-mem-seek: build-arm64-linux $(DEBIAN_ROOTFS_DIR)
+	CC="$(CC)" \
+	ISH_BIN="$(CURDIR)/$(RELEASE_BUILD_DIR)/ish" \
+	ROOTFS="$(DEBIAN_ROOTFS_DIR)" \
+	TIMEOUT_S="$(TIMEOUT_S)" \
+	./tests/arm64/proc/run-proc-mem-seek.sh
 
 .PHONY: test-arm64-internal-continue-fixtures
 test-arm64-internal-continue-fixtures: build-arm64-linux

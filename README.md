@@ -4,7 +4,7 @@
 
 `ios-linuxkit` runs an AArch64 Linux userland inside an iOS app and as a command-line process on an AArch64 Linux host. It derives from [iSH](https://ish.app/) and uses iSH's userspace kernel, filesystems and Asbestos threaded-code interpreter.
 
-The current source version is **2.1.0** with Apple build number **806**. The repository supports one guest architecture: ARM64. The interpreter decodes guest instructions into programs of pointers to precompiled host functions. All executable host instructions come from the built application; the interpreter allocates only data for translated programs.
+The current source version is **2.1.1** with Apple build number **807**. The repository supports one guest architecture: ARM64. The interpreter decodes guest instructions into programs of pointers to precompiled host functions. All executable host instructions come from the built application; the interpreter allocates only data for translated programs.
 
 ## What is in the repository
 
@@ -60,6 +60,7 @@ curl -LO https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-min
 | Build release and debug | `make build-arm64-linux-all` |
 | Check documentation links | `make check-docs` |
 | Test AdvSIMD FP widening and narrowing | `CC=clang make test-arm64-fcvt-vector` |
+| Test `/proc/<pid>/mem` seek semantics | `CC=clang make test-arm64-proc-mem-seek` |
 | Run staged runtime coverage | `make test-arm64-runtime-coverage` |
 | Run coverage with the debug binary | `make test-arm64-runtime-coverage-debug` |
 | Run CLI corner cases | `make test-arm64-cli-corner-smoke` |

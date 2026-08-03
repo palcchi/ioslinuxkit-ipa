@@ -21,6 +21,7 @@ This builds release and debug variants. Treat compiler errors, assembler errors 
 | Gate | Command | Scope |
 |---|---|---|
 | AdvSIMD FP conversions | `CC=clang make test-arm64-fcvt-vector` | Native AArch64 oracle plus guest widening/narrowing, FP state and decoder masks. |
+| proc mem seeks | `CC=clang make test-arm64-proc-mem-seek` | One static fixture natively and under iSH; checks `/proc/<pid>/mem` negative, wrapping, `SEEK_SET`/`SEEK_CUR` and rejected `SEEK_END` semantics. |
 | Release runtime | `make test-arm64-runtime-coverage` | Shell, package manager, C fixtures and language runtimes. |
 | Debug runtime | `make test-arm64-runtime-coverage-debug` | Same suite with the debug binary. |
 | CLI corner cases | `make test-arm64-cli-corner-smoke` | TUI, DNS, HTTPS, Git, Docker probes and command-line packages. |
@@ -68,10 +69,11 @@ Standalone source fixtures live under:
 tests/arm64/atomics/
 tests/arm64/fp/
 tests/arm64/loadstore/
+tests/arm64/proc/
 tests/arm64/signals/
 ```
 
-They cover CAS pairs, exclusive monitor clearing, exclusive widths, pair exclusives, AdvSIMD floating-point conversions, `LDPSW` and per-thread alternate signal stacks. New instruction work should add a similarly small fixture and include it in a repeatable script or runtime row.
+They cover CAS pairs, exclusive monitor clearing, exclusive widths, pair exclusives, AdvSIMD floating-point conversions, `LDPSW`, procfs seek semantics and per-thread alternate signal stacks. New low-level work should add a similarly small fixture and include it in a repeatable script or runtime row.
 
 A focused fixture should test architectural edge cases relevant to the instruction:
 
@@ -112,7 +114,8 @@ When a broad row fails, rerun its exact guest command with a bounded timeout. Pr
 [`reports/audits/OPENMINIS_AUDIT_2026-07-20.md`](reports/audits/OPENMINIS_AUDIT_2026-07-20.md) records two revisions:
 
 - at `35dac743`, Clang release and debug builds, all 47 C/ARM64 rows, and focused atomic, timer, epoll, `madvise`, signal and pidfd regressions passed; two broad release runs reached 82/83 because the tested Clojure package lacked `clojure.main`;
-- at `40f1bf40`, clean Clang release and debug builds and `test-arm64-fcvt-vector` passed for `FCVTN`, `FCVTN2`, `FCVTL`, `FCVTL2`, `FCVTXN` and `FCVTXN2`.
+- at `40f1bf40`, clean Clang release and debug builds and `test-arm64-fcvt-vector` passed for `FCVTN`, `FCVTN2`, `FCVTL`, `FCVTL2`, `FCVTXN` and `FCVTXN2`;
+- the 2.1.1 follow-up preserves a byte-identical static `/proc/self/mem` fixture: `v2.1.0` crashes the host process at PC `0x0`, while the fixed release and debug binaries pass the native seek matrix.
 
 The broad runtime suite depends on package-manager workers and live repositories. A package bootstrap failure precedes emulator rows and is recorded as an infrastructure failure, not an emulator pass or regression. Older reports under `reports/` apply only to the code and environment they name.
 
