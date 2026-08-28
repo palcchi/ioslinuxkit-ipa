@@ -19,6 +19,17 @@ jobs:
       - name: List schemes
         run: xcodebuild -project iSH.xcodeproj -list
 
+      - name: Install build tools
+        run: |
+          brew install ninja cmake
+
+      - name: Prepare iSH build
+        run: |
+          git submodule update --init --recursive
+
+          echo "=== Searching for Ninja build files ==="
+          find . -name "build.ninja" -o -name "CMakeLists.txt" | head -50
+
       - name: Build iSH ARM64
         run: |
           set -o pipefail
