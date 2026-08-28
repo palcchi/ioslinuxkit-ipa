@@ -21,7 +21,7 @@ jobs:
 
       - name: Install build tools
         run: |
-          brew install ninja cmake
+          brew install meson ninja
 
       - name: Prepare iSH build
         run: |
