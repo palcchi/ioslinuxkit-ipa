@@ -109,6 +109,21 @@ jobs:
           echo "===== IPA CREATED ====="
           ls -lh iSH-ARM64.ipa
 
+      - name: Inspect IPA
+        run: |
+          echo "===== PAYLOAD ====="
+          find Payload -maxdepth 4 -print 2>/dev/null || true
+
+          echo "===== APP EXECUTABLE ====="
+          find Payload -type f -perm -111 -print 2>/dev/null || true
+
+          echo "===== APP INFO ====="
+          APP=$(find Payload -type d -name "*.app" | head -1)
+          if [ -n "$APP" ]; then
+            echo "APP=$APP"
+            /usr/bin/file "$APP"/*
+          fi
+
       - name: Upload IPA
         if: success()
         uses: actions/upload-artifact@v4
