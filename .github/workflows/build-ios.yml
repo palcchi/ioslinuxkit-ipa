@@ -30,6 +30,12 @@ jobs:
           echo "=== Searching for Ninja build files ==="
           find . -name "build.ninja" -o -name "CMakeLists.txt" | head -50
 
+      - name: Inspect Dispatch header
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK: $SDK"
+          sed -n '140,152p' "$SDK/usr/include/dispatch/base.h"
+
       - name: Build iSH ARM64
         run: |
           set -o pipefail
