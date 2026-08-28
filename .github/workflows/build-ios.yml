@@ -36,6 +36,18 @@ jobs:
           echo "SDK: $SDK"
           sed -n '140,152p' "$SDK/usr/include/dispatch/base.h"
 
+      - name: Inspect Apple SDK
+        run: |
+          echo "=== XCODE ==="
+          xcodebuild -version
+          echo "=== CLANG ==="
+          clang --version
+          echo "=== SDK ==="
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "$SDK"
+          echo "=== DISPATCH BASE.H ==="
+          sed -n '135,155p' "$SDK/usr/include/dispatch/base.h"
+
       - name: Build iSH ARM64
         run: |
           set -o pipefail
