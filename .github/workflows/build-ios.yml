@@ -47,6 +47,14 @@ jobs:
           name: xcode-build-log
           path: xcode-build.log
 
+      - name: Show build errors
+        if: failure()
+        run: |
+          echo "===== BUILD ERRORS ====="
+          if [ -f xcode-build.log ]; then
+            grep -E "error:|fatal error:|BUILD FAILED" xcode-build.log | tail -50 || true
+          fi
+
       - name: Find app
         run: |
           find ~/Library/Developer/Xcode/DerivedData \
