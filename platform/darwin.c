@@ -12,7 +12,6 @@
 #include "debug.h"
 #include "platform/platform.h"
 
-#include <dispatch/dispatch.h>
 // mach_host_self() increments the send-right refcount on each call. Caching the
 // right avoids leaking refs when guests poll /proc/stat or /proc/meminfo.
 static mach_port_t cached_host_self(void) {
