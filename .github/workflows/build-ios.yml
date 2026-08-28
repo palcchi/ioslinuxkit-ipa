@@ -22,6 +22,8 @@ jobs:
 
       - name: Build iSH ARM64
         run: |
+          set -o pipefail
+
           xcodebuild \
             -project iSH.xcodeproj \
             -scheme iSH-ARM64 \
@@ -30,7 +32,20 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            build
+            build 2>&1 | tee xcode-build.log
+
+      - name: Show Xcode errors
+        if: failure()
+        run: |
+          echo "===== XCODE ERRORS ====="
+          grep -E "error:|fatal error:|BUILD FAILED" xcode-build.log | tail -50 || true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-build-log
+          path: xcode-build.log
 
       - name: Find app
         run: |
