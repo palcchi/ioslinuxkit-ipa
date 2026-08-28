@@ -50,6 +50,11 @@ jobs:
           echo "=== DISPATCH BASE.H ==="
           sed -n '135,155p' "$SDK/usr/include/dispatch/base.h"
 
+      - name: Inspect iSH Build Settings
+        run: |
+          echo "=== TARGET BUILD SETTINGS ==="
+          xcodebuild             -project ish.xcodeproj             -scheme iSH-ARM64             -showBuildSettings             | grep -E "OTHER_CFLAGS|GCC_PREPROCESSOR_DEFINITIONS|HEADER_SEARCH_PATHS|CLANG_C|SWIFT"
+
       - name: Build iSH ARM64
         run: |
           set -o pipefail
