@@ -92,7 +92,7 @@ window.addEventListener('load', async () => {
         const terminalOptions = {
             cols: 80,
             rows: 24,
-            allowTransparency: true,
+            allowTransparency: false,
             cursorBlink: styleState.blinkCursor,
             cursorStyle: cursorStyleForGhostty(styleState.cursorShape),
             devicePixelRatio: preferredDevicePixelRatio(),
