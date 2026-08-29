@@ -49,3 +49,29 @@ jobs:
       - name: Build LinuxKit x86_64 guest host binary
         run: |
           ninja -C build-x86_64
+      - name: Build static x86_64 guest ELF fixture
+        run: |
+          set -euo pipefail
+          clang -target x86_64-linux-gnu -fuse-ld=lld \
+            -nostdlib -static -no-pie \
+            -Wl,--build-id=none -Wl,-e,_start -Wl,-Ttext=0x400000 \
+            tests/x86_64/hello_guest.S -o hello-x86_64
+          file hello-x86_64
+          readelf -h hello-x86_64 | tee hello-elf-header.txt
+          grep -q 'Class:.*ELF64' hello-elf-header.txt
+          grep -q 'Machine:.*Advanced Micro Devices X86-64' hello-elf-header.txt
+          objdump -d hello-x86_64 | sed -n '/<_start>:/,+16p'
+      - name: Build minimal fakefs
+        run: |
+          set -euo pipefail
+          rm -rf x86-rootfs x86-rootfs-fakefs x86-rootfs.tar
+          mkdir -p x86-rootfs/dev
+          install -m 0755 hello-x86_64 x86-rootfs/hello-x86_64
+          tar --numeric-owner -C x86-rootfs -cf x86-rootfs.tar .
+          ./build-x86_64/tools/fakefsify x86-rootfs.tar x86-rootfs-fakefs
+      - name: Run static ELF through full LinuxKit x86_64 guest
+        run: |
+          set -euo pipefail
+          timeout 20 ./build-x86_64/ish -f x86-rootfs-fakefs /hello-x86_64 2>&1 | tee full-x86-elf.log
+          grep -q '^HELLO X86_64 GUEST$' full-x86-elf.log
+          echo 'FULL X86_64 ELF GUEST: PASS'
