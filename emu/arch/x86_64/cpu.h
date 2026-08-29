@@ -45,19 +45,21 @@ struct cpu_state {
     struct mmu *mmu;
     long cycle;
 
-    // Native x86_64 architectural GPRs. Keep named aliases for a few legacy
-    // shared-kernel paths while the architecture split is being completed.
+    // Native x86_64 architectural GPRs. The e* aliases are intentionally
+    // 64-bit during bring-up: old i386-oriented shared-kernel code refers to
+    // those names, and truncating a real x86_64 pointer merely to satisfy the
+    // compiler would be an impressively stupid way to manufacture bugs.
     union {
         uint64_t x86_regs[16];
         struct {
             union { uint64_t rax; uint64_t eax; };
-            uint64_t rcx;
-            uint64_t rdx;
-            uint64_t rbx;
+            union { uint64_t rcx; uint64_t ecx; };
+            union { uint64_t rdx; uint64_t edx; };
+            union { uint64_t rbx; uint64_t ebx; };
             uint64_t rsp_slot; // architectural RSP is cpu->sp below
-            uint64_t rbp;
-            uint64_t rsi;
-            uint64_t rdi;
+            union { uint64_t rbp; uint64_t ebp; };
+            union { uint64_t rsi; uint64_t esi; };
+            union { uint64_t rdi; uint64_t edi; };
             uint64_t r8;
             uint64_t r9;
             uint64_t r10;
@@ -70,8 +72,8 @@ struct cpu_state {
     };
 
     // Shared 64-bit kernel code already expects a member named sp. The esp
-    // alias is temporary compatibility for older fork code; both are 64-bit in
-    // this backend so cloning cannot truncate a guest stack address.
+    // alias is temporary compatibility for older fork/signal code; both are
+    // 64-bit so guest stack addresses are never truncated.
     union {
         uint64_t sp;
         uint64_t esp;
@@ -80,9 +82,13 @@ struct cpu_state {
     union {
         uint64_t rip;
         uint64_t pc;
+        uint64_t eip;
     };
 
-    uint64_t rflags;
+    union {
+        uint64_t rflags;
+        uint64_t eflags;
+    };
 
     // Canonical flag bytes. Keeping these named fields lets shared diagnostics
     // compile while the real x86_64 signal frame ABI is brought up.
