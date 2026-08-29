@@ -23,10 +23,13 @@ add_project_arguments('-DLOG_HANDLER_' + get_option('log_handler').to_upper() + 
 add_project_arguments('-DENGINE_' + get_option('engine').to_upper() + '=1', language: 'c')
 
 guest_arch = get_option('guest_arch')
-if guest_arch != 'arm64'
-    error('Only the ARM64 guest backend is supported')
+if guest_arch == 'arm64'
+    add_project_arguments('-DGUEST_ARM64=1', language: 'c')
+elif guest_arch == 'x86_64'
+    add_project_arguments('-DGUEST_X86_64=1', language: 'c')
+else
+    error('Unsupported guest architecture: ' + guest_arch)
 endif
-add_project_arguments('-DGUEST_ARM64=1', language: 'c')
 
 if get_option('no_crlf')
     add_project_arguments('-DNO_CRLF', language: 'c')
@@ -43,34 +46,47 @@ libdl = cc.find_library('dl', required: false)
 sqlite3 = cc.find_library('sqlite3')
 dependencies = [librt, libm, libdl, threads, sqlite3]
 
-subdir('vdso/arm64')
-vdso_inc = include_directories('vdso/arm64')
+if guest_arch == 'arm64'
+    subdir('vdso/arm64')
+    vdso_inc = include_directories('vdso/arm64')
+else
+    subdir('vdso/x86_64')
+    vdso_inc = include_directories('vdso/x86_64')
+endif
 includes += vdso_inc
 
-offsets = custom_target('offsets',
-    output: 'cpu-offsets.h', input: 'asbestos/offsets.c', depfile: 'cpu-offsets.h.d',
-    command: [find_program('tools/staticdefine.sh'), '@OUTDIR@/compile_commands.json', '@INPUT@', '@OUTPUT@', '@DEPFILE@'])
-
-# Common emu sources
+# Common emulator sources.
 emu_src = [
     'emu/tlb.c',
 ]
 
-gadgets = 'asbestos/guest-arm64/gadgets-' + host_machine.cpu_family()
-emu_src += [
-    'emu/arch/arm64/fpu.c',
-    'asbestos/asbestos.c',
-    'asbestos/guest-arm64/gen.c',
-    'asbestos/guest-arm64/crypto_helpers.c',
-    'asbestos/helpers.c',
-    gadgets+'/entry.S',
-    gadgets+'/memory.S',
-    gadgets+'/control.S',
-    gadgets+'/math.S',
-    gadgets+'/bits.S',
-    gadgets+'/crypto.S',
-    offsets,
-]
+if guest_arch == 'arm64'
+    offsets = custom_target('offsets',
+        output: 'cpu-offsets.h', input: 'asbestos/offsets.c', depfile: 'cpu-offsets.h.d',
+        command: [find_program('tools/staticdefine.sh'), '@OUTDIR@/compile_commands.json', '@INPUT@', '@OUTPUT@', '@DEPFILE@'])
+
+    gadgets = 'asbestos/guest-arm64/gadgets-' + host_machine.cpu_family()
+    emu_src += [
+        'emu/arch/arm64/fpu.c',
+        'asbestos/asbestos.c',
+        'asbestos/guest-arm64/gen.c',
+        'asbestos/guest-arm64/crypto_helpers.c',
+        'asbestos/helpers.c',
+        gadgets+'/entry.S',
+        gadgets+'/memory.S',
+        gadgets+'/control.S',
+        gadgets+'/math.S',
+        gadgets+'/bits.S',
+        gadgets+'/crypto.S',
+        offsets,
+    ]
+else
+    # Direct x86_64 interpreter. No nested QEMU and no ARM64 fiber/JIT backend.
+    emu_src += [
+        'emu/arch/x86_64/interp.c',
+        'asbestos/x86_64_stub.c',
+    ]
+endif
 
 libish_emu = library('ish_emu', emu_src, include_directories: includes)
 
@@ -86,6 +102,9 @@ if get_option('kernel') == 'ish'
         error('Only asbestos is supported with ish kernel')
     endif
 
+    # During early x86_64 bring-up the interpreter translates Linux x86_64
+    # syscall numbers/registers into the existing 64-bit syscall compatibility
+    # table. A native x86_64 table will replace this once structure ABIs land.
     arch_kernel_src = ['kernel/arch/arm64/calls.c']
 
     src = [
