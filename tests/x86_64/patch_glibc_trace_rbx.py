@@ -9,6 +9,52 @@ if '#include <stdio.h>\n' not in s:
         raise SystemExit('include anchor missing')
     s = s.replace(inc, inc + '#include <stdio.h>\n', 1)
 
+# The bad RBX value is restored by POP RBX. Track the first stack write that
+# creates that exact 8-byte saved value. This distinguishes a register decode
+# bug from corruption of the callee-saved stack slot.
+write_anchor = '''    return 0;\n}\n\nstatic int fetch_u8'''
+write_insert = r'''    static bool vmine_bad_stack_seen = false;
+    if (!vmine_bad_stack_seen && addr >= 0xff000000ULL && addr < 0x100000000ULL) {
+        addr_t first = addr >= 7 ? addr - 7 : 0;
+        addr_t last = addr + size - 1;
+        for (addr_t candidate = first; candidate <= last; candidate++) {
+            uint64_t observed = 0;
+            bool mapped = true;
+            for (unsigned j = 0; j < 8; j++) {
+                uint8_t *b = mmu_translate(cpu->mmu, candidate + j, MEM_READ);
+                if (b == NULL) {
+                    mapped = false;
+                    break;
+                }
+                observed |= (uint64_t)(*b) << (j * 8);
+            }
+            if (mapped && observed == 0x770000007cULL) {
+                fprintf(stderr,
+                        "[vmine-rbx-stack-write] pc=%llx write_addr=%llx size=%llu slot=%llx rsp=%llx bytes=",
+                        (unsigned long long)cpu->pc,
+                        (unsigned long long)addr,
+                        (unsigned long long)size,
+                        (unsigned long long)candidate,
+                        (unsigned long long)cpu->sp);
+                for (unsigned xi = 0; xi < 16; xi++) {
+                    uint8_t *xb = mmu_translate(cpu->mmu, cpu->pc + xi, MEM_READ);
+                    if (xb == NULL) fprintf(stderr, "??");
+                    else fprintf(stderr, "%02x", *xb);
+                }
+                fprintf(stderr, "\n");
+                vmine_bad_stack_seen = true;
+                break;
+            }
+        }
+    }
+    return 0;
+}
+
+static int fetch_u8'''
+if write_anchor not in s:
+    raise SystemExit('guest_write return anchor missing')
+s = s.replace(write_anchor, write_insert, 1)
+
 anchor = '''    for (unsigned step = 0; step < INTERP_SLICE; step++) {\n'''
 insert = r'''    // Temporary BDS bring-up diagnostic. The current frontier reaches an
     // indirect call with RBX=0x770000007d even though the loop index should be
@@ -31,11 +77,12 @@ loop_insert = r'''        uint64_t vmine_cur_rbx = x86_64_get_reg(cpu, X86_64_RB
         if (vmine_rbx_init && !vmine_rbx_origin_seen && vmine_rbx_bad_high &&
             !vmine_prev_bad_high) {
             fprintf(stderr,
-                    "[vmine-rbx-origin] prevpc=%llx nextpc=%llx old=%llx new=%llx bytes=",
+                    "[vmine-rbx-origin] prevpc=%llx nextpc=%llx old=%llx new=%llx rsp=%llx bytes=",
                     (unsigned long long)vmine_prev_pc,
                     (unsigned long long)cpu->pc,
                     (unsigned long long)vmine_prev_rbx,
-                    (unsigned long long)vmine_cur_rbx);
+                    (unsigned long long)vmine_cur_rbx,
+                    (unsigned long long)cpu->sp);
             for (unsigned xi = 0; xi < 16; xi++) {
                 uint8_t xb = 0;
                 if (guest_read(cpu, vmine_prev_pc + xi, &xb, 1) < 0)
@@ -72,4 +119,4 @@ if loop_anchor not in s:
     raise SystemExit('loop body anchor missing')
 s = s.replace(loop_anchor, loop_insert + loop_anchor, 1)
 p.write_text(s)
-print('patched targeted RBX corruption origin trace')
+print('patched targeted RBX stack-corruption trace')
