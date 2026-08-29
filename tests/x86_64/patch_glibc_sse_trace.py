@@ -3,6 +3,13 @@ from pathlib import Path
 
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
+
+include_anchor = '''#include <string.h>\n'''
+if '#include <stdio.h>\n' not in s:
+    if include_anchor not in s:
+        raise SystemExit("include anchor missing")
+    s = s.replace(include_anchor, include_anchor + '#include <stdio.h>\n', 1)
+
 anchor = '''            if (fetch_u8(cpu, ip + 1, &op2) < 0) goto gpf;\n\n'''
 insert = r'''            if (op2 == 0x10) {
                 uint8_t vmine_modrm = 0;
