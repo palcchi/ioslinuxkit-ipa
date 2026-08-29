@@ -100,10 +100,6 @@ static void test_exact_pminub(void) {
 static void test_exact_imul_imm(void) {
     memset(memory, 0, sizeof(memory));
 
-    // Same REX/opcode/ModRM frontier observed in Jammy /bin/ls:
-    //   49 69 fc 03 00 00 00    imul $3, %r12, %rdi
-    // Then exercise REX.R + REX.B with the compact 6B imm8 form:
-    //   4d 6b fc fe             imul $-2, %r12, %r15
     const uint8_t program[] = {
         0x49,0x69,0xfc,0x03,0x00,0x00,0x00,
         0x4d,0x6b,0xfc,0xfe,
@@ -127,7 +123,6 @@ static void test_exact_imul_imm(void) {
 static void test_exact_xorps(void) {
     memset(memory, 0, sizeof(memory));
 
-    // Exact BDS frontier: 0F 57 C0 = XORPS xmm0, xmm0.
     const uint8_t program[] = {
         0x0f,0x57,0xc0,
         0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
@@ -145,6 +140,61 @@ static void test_exact_xorps(void) {
     assert(cpu.x86_last_syscall == 60);
     assert(cpu.xmm[0].u128 == 0);
     puts("DIRECT X86_64 XORPS: PASS");
+}
+
+static void test_mov_r8_imm(void) {
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+
+    // Exact BDS frontier: B0 01 = MOV AL, 1. Preserve the upper 56 bits.
+    memset(memory, 0, sizeof(memory));
+    const uint8_t al_program[] = {
+        0xb0,0x01,
+        0x48,0x89,0xc7,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    memcpy(memory, al_program, sizeof(al_program));
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    x86_64_set_reg(&cpu, X86_64_RAX, 0x1122334455667788ULL);
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(cpu.x86_last_syscall == 60);
+    assert(x86_64_get_reg(&cpu, X86_64_RDI) == 0x1122334455667701ULL);
+
+    // Legacy B4 means AH, not SPL.
+    memset(memory, 0, sizeof(memory));
+    const uint8_t ah_program[] = {
+        0xb4,0xaa,
+        0x48,0x89,0xc7,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    memcpy(memory, ah_program, sizeof(ah_program));
+    cpu = fresh_cpu(&mmu);
+    x86_64_set_reg(&cpu, X86_64_RAX, 0x1122334455667788ULL);
+    interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(x86_64_get_reg(&cpu, X86_64_RDI) == 0x112233445566aa88ULL);
+
+    // With REX, B4 means SPL. REX.B on B0 reaches r8b.
+    memset(memory, 0, sizeof(memory));
+    const uint8_t rex_program[] = {
+        0x40,0xb4,0x55,
+        0x41,0xb0,0x5a,
+        0x48,0x89,0xe7,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    memcpy(memory, rex_program, sizeof(rex_program));
+    cpu = fresh_cpu(&mmu);
+    uint64_t initial_sp = cpu.sp;
+    x86_64_set_reg(&cpu, X86_64_R8, 0x8877665544332211ULL);
+    interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(x86_64_get_reg(&cpu, X86_64_RDI) == ((initial_sp & ~0xffULL) | 0x55ULL));
+    assert(x86_64_get_reg(&cpu, X86_64_R8) == 0x887766554433225aULL);
+
+    puts("DIRECT X86_64 MOV R8 IMM: PASS");
 }
 
 static void test_write_exit(void) {
@@ -186,6 +236,7 @@ int main(void) {
     test_exact_pminub();
     test_exact_imul_imm();
     test_exact_xorps();
+    test_mov_r8_imm();
     test_write_exit();
     return 0;
 }
