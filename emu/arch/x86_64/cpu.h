@@ -10,25 +10,11 @@
 #include <stddef.h>
 #endif
 
-// Architectural register numbering follows the low three ModRM register bits,
-// extended by REX.R/REX.B.
 enum x86_64_reg {
-    X86_64_RAX = 0,
-    X86_64_RCX = 1,
-    X86_64_RDX = 2,
-    X86_64_RBX = 3,
-    X86_64_RSP = 4,
-    X86_64_RBP = 5,
-    X86_64_RSI = 6,
-    X86_64_RDI = 7,
-    X86_64_R8  = 8,
-    X86_64_R9  = 9,
-    X86_64_R10 = 10,
-    X86_64_R11 = 11,
-    X86_64_R12 = 12,
-    X86_64_R13 = 13,
-    X86_64_R14 = 14,
-    X86_64_R15 = 15,
+    X86_64_RAX = 0, X86_64_RCX = 1, X86_64_RDX = 2, X86_64_RBX = 3,
+    X86_64_RSP = 4, X86_64_RBP = 5, X86_64_RSI = 6, X86_64_RDI = 7,
+    X86_64_R8 = 8, X86_64_R9 = 9, X86_64_R10 = 10, X86_64_R11 = 11,
+    X86_64_R12 = 12, X86_64_R13 = 13, X86_64_R14 = 14, X86_64_R15 = 15,
 };
 
 union x86_64_xmm {
@@ -45,10 +31,9 @@ struct cpu_state {
     struct mmu *mmu;
     long cycle;
 
-    // Native x86_64 architectural GPRs. The e* aliases are intentionally
-    // 64-bit during bring-up: old i386-oriented shared-kernel code refers to
-    // those names, and truncating a real x86_64 pointer merely to satisfy the
-    // compiler would be an impressively stupid way to manufacture bugs.
+    // Native x86_64 architectural GPRs. The e* aliases are deliberately kept
+    // 64-bit during bring-up so legacy shared-kernel paths cannot truncate
+    // actual x86_64 pointers while we replace the old i386 ABI code.
     union {
         uint64_t x86_regs[16];
         struct {
@@ -56,56 +41,32 @@ struct cpu_state {
             union { uint64_t rcx; uint64_t ecx; };
             union { uint64_t rdx; uint64_t edx; };
             union { uint64_t rbx; uint64_t ebx; };
-            uint64_t rsp_slot; // architectural RSP is cpu->sp below
+            uint64_t rsp_slot;
             union { uint64_t rbp; uint64_t ebp; };
             union { uint64_t rsi; uint64_t esi; };
             union { uint64_t rdi; uint64_t edi; };
-            uint64_t r8;
-            uint64_t r9;
-            uint64_t r10;
-            uint64_t r11;
-            uint64_t r12;
-            uint64_t r13;
-            uint64_t r14;
-            uint64_t r15;
+            uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
         };
     };
 
-    // Shared 64-bit kernel code already expects a member named sp. The esp
-    // alias is temporary compatibility for older fork/signal code; both are
-    // 64-bit so guest stack addresses are never truncated.
-    union {
-        uint64_t sp;
-        uint64_t esp;
-    };
+    union { uint64_t sp; uint64_t esp; };
+    union { uint64_t rip; uint64_t pc; uint64_t eip; };
+    union { uint64_t rflags; uint64_t eflags; };
 
-    union {
-        uint64_t rip;
-        uint64_t pc;
-        uint64_t eip;
-    };
-
-    union {
-        uint64_t rflags;
-        uint64_t eflags;
-    };
-
-    // Canonical flag bytes. Keeping these named fields lets shared diagnostics
-    // compile while the real x86_64 signal frame ABI is brought up.
     uint8_t nf;
     uint8_t zf;
     uint8_t cf;
     uint8_t vf;
+    // Temporary single-step compatibility for ptrace. Eventually this becomes
+    // architectural RFLAGS.TF handling in the x86_64 interpreter itself.
+    bool tf;
     uint32_t nzcv;
 
     union x86_64_xmm xmm[16];
-    // Compatibility storage used by shared ARM64-oriented save paths during
-    // early bring-up. It is not the final x86_64 FP ABI representation.
     union x86_64_xmm fp[32];
     uint32_t fpcr;
     uint32_t fpsr;
 
-    // FS base for Linux x86_64 TLS during bring-up.
     uint64_t tls_ptr;
 
     addr_t segfault_addr;
@@ -115,9 +76,8 @@ struct cpu_state {
     bool *poked_ptr;
     bool _poked;
 
-    // Shared-kernel syscall compatibility view. Keep 32 slots because some
-    // ARM64-only diagnostic code still indexes x19-x30 even when it is inert on
-    // the x86_64 path. Architectural x86_64 state remains in x86_regs above.
+    // Shared-kernel syscall compatibility view. Architectural x86_64 state is
+    // kept separately in x86_regs.
     uint64_t regs[32];
     bool x86_syscall_pending;
     uint64_t x86_last_syscall;
@@ -149,6 +109,7 @@ static inline void collapse_flags(struct cpu_state *cpu) {
     if (cpu->cf) f |= 1ULL << 0; else f &= ~(1ULL << 0);
     if (cpu->zf) f |= 1ULL << 6; else f &= ~(1ULL << 6);
     if (cpu->nf) f |= 1ULL << 7; else f &= ~(1ULL << 7);
+    if (cpu->tf) f |= 1ULL << 8; else f &= ~(1ULL << 8);
     if (cpu->vf) f |= 1ULL << 11; else f &= ~(1ULL << 11);
     cpu->rflags = f;
 }
@@ -157,6 +118,7 @@ static inline void expand_flags(struct cpu_state *cpu) {
     cpu->cf = (cpu->rflags >> 0) & 1;
     cpu->zf = (cpu->rflags >> 6) & 1;
     cpu->nf = (cpu->rflags >> 7) & 1;
+    cpu->tf = (cpu->rflags >> 8) & 1;
     cpu->vf = (cpu->rflags >> 11) & 1;
 }
 
