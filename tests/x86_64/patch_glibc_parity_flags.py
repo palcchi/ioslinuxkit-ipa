@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 cpu_h = Path("emu/arch/x86_64/cpu.h")
 s = cpu_h.read_text()
@@ -53,7 +54,6 @@ static uint8_t parity_even8(uint64_t value) {
     uint8_t v = (uint8_t)value;
     v ^= v >> 4;
     v &= 0x0f;
-    // 0x6996 has a 1 for odd parity; x86 PF is set for even parity.
     return !((0x6996u >> v) & 1u);
 }
 
@@ -75,7 +75,6 @@ if old not in s:
     raise SystemExit("logic flags anchor not found")
 s = s.replace(old, new, 1)
 
-# The same zf/nf pair appears in add and sub after the logic replacement.
 old = '''    cpu->zf = result == 0;
     cpu->nf = (result & sign_bit(bits)) != 0;
     cpu->vf = ((~(aa ^ bb) & (aa ^ result)) & sign_bit(bits)) != 0;
@@ -101,21 +100,20 @@ if old not in s:
     raise SystemExit("sub flags anchor not found")
 s = s.replace(old, new, 1)
 
-old = '''        // PF is not exposed in cpu_state yet. Conservative values keep the
-        // decoder deterministic until parity-flag support lands.
-        case 0x8: return false;                           // S? actually cc=8 is S
-        case 0x9: return true;                            // NS
-        case 0xa: return false;                           // P/PE
-        case 0xb: return true;                            // NP/PO
-'''
-new = '''        case 0x8: return cpu->nf;                         // S
-        case 0x9: return !cpu->nf;                        // NS
-        case 0xa: return cpu->pf;                         // P/PE
-        case 0xb: return !cpu->pf;                        // NP/PO
-'''
-if old not in s:
-    raise SystemExit("condition parity/sign anchor not found")
-s = s.replace(old, new, 1)
+# Prior bring-up patches may rewrite comments around these cases, so replace
+# each actual switch arm instead of depending on a whole comment block.
+repls = {
+    8: '        case 0x8: return cpu->nf;                         // S',
+    9: '        case 0x9: return !cpu->nf;                        // NS',
+    10: '        case 0xa: return cpu->pf;                         // P/PE',
+    11: '        case 0xb: return !cpu->pf;                        // NP/PO',
+}
+for cc, line in repls.items():
+    pat = rf'^\s*case 0x{cc:x}: return [^;]+;[^\n]*$'
+    s2, n = re.subn(pat, line, s, count=1, flags=re.M)
+    if n != 1:
+        raise SystemExit(f"condition case {cc:x} not found")
+    s = s2
 
 # Shift groups explicitly set ZF/SF. Make PF follow the result as x86 requires.
 s = s.replace('''                cpu->zf = (result & bits_mask(bits)) == 0;
