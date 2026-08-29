@@ -75,30 +75,37 @@ new = '''    unsigned mod = modrm >> 6;
     unsigned raw_rm = modrm & 7;
     unsigned raw_reg = (modrm >> 3) & 7;
 
-    // High-byte aliases exist only for 8-bit operand encodings. The earlier
-    // bring-up version tagged every no-REX ModRM code 4..7, which accidentally
-    // turned XMM4..XMM7 into 0x104..0x107. Determine byte semantics from the
-    // opcode immediately preceding this ModRM (or the 0F opcode pair).
+    // High-byte aliases exist only for legacy 8-bit GPR encodings. Determine
+    // whether this ModRM belongs to a one-byte opcode or a 0F-prefixed opcode
+    // before interpreting opcode values such as 0x10. In particular, 0x10 is
+    // ADC r/m8,r8 as a one-byte opcode but MOVUPS as 0F 10. Confusing those
+    // cases turns XMM4 into the synthetic 0x104 high-byte marker.
     uint8_t prev_op = 0, prev2_op = 0;
     bool byte_encoding = false;
+    bool two_byte_0f = false;
     if (modrm_addr > 0 && fetch_u8(cpu, modrm_addr - 1, &prev_op) == 0) {
-        switch (prev_op) {
-            // r/m8,r8 and r8,r/m8 ALU families plus TEST/XCHG/MOV.
-            case 0x00: case 0x02: case 0x08: case 0x0a:
-            case 0x10: case 0x12: case 0x18: case 0x1a:
-            case 0x20: case 0x22: case 0x28: case 0x2a:
-            case 0x30: case 0x32: case 0x38: case 0x3a:
-            case 0x84: case 0x86: case 0x88: case 0x8a:
-            // Immediate/group and shift byte forms.
-            case 0x80: case 0xc0: case 0xc6: case 0xd0: case 0xd2:
-            case 0xf6: case 0xfe:
-                byte_encoding = true;
-                break;
-            default:
-                break;
-        }
-        if (modrm_addr > 1 && fetch_u8(cpu, modrm_addr - 2, &prev2_op) == 0 && prev2_op == 0x0f) {
-            // SETcc, CMPXCHG8, XADD8 and MOVZX/MOVSX from r/m8.
+        if (modrm_addr > 1 && fetch_u8(cpu, modrm_addr - 2, &prev2_op) == 0)
+            two_byte_0f = prev2_op == 0x0f;
+
+        if (!two_byte_0f) {
+            switch (prev_op) {
+                // r/m8,r8 and r8,r/m8 ALU families plus TEST/XCHG/MOV.
+                case 0x00: case 0x02: case 0x08: case 0x0a:
+                case 0x10: case 0x12: case 0x18: case 0x1a:
+                case 0x20: case 0x22: case 0x28: case 0x2a:
+                case 0x30: case 0x32: case 0x38: case 0x3a:
+                case 0x84: case 0x86: case 0x88: case 0x8a:
+                // Immediate/group and shift byte forms.
+                case 0x80: case 0xc0: case 0xc6: case 0xd0: case 0xd2:
+                case 0xf6: case 0xfe:
+                    byte_encoding = true;
+                    break;
+                default:
+                    break;
+            }
+        } else {
+            // SETcc, CMPXCHG8, XADD8 and MOVZX/MOVSX from r/m8 are the 0F
+            // forms whose ModRM really does use byte-register semantics.
             if ((prev_op >= 0x90 && prev_op <= 0x9f) ||
                 prev_op == 0xb0 || prev_op == 0xc0 ||
                 prev_op == 0xb6 || prev_op == 0xbe)
