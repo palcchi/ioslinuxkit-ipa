@@ -2,6 +2,13 @@ name: Build iSH ARM64 IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'app/**'
+      - 'iSH.xcodeproj/**'
+      - '.github/workflows/build-ios.yml'
 
 jobs:
   build:
@@ -11,6 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: master
           submodules: recursive
 
       - name: Select Xcode
@@ -18,114 +26,73 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.4.app
           xcodebuild -version
 
-      - name: List schemes
-        run: xcodebuild -project iSH.xcodeproj -list
-
       - name: Install build tools
-        run: |
-          brew install meson ninja
+        run: brew install meson ninja
 
       - name: Prepare iSH build
-        run: |
-          git submodule update --init --recursive
+        run: git submodule update --init --recursive
 
-          echo "=== Searching for Ninja build files ==="
-          find . -name "build.ninja" -o -name "CMakeLists.txt" | head -50
-
-      - name: Inspect Dispatch header
+      - name: Verify ARM64 terminal renderer
         run: |
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "SDK: $SDK"
-          sed -n '140,152p' "$SDK/usr/include/dispatch/base.h"
-
-      - name: Inspect Apple SDK
-        run: |
-          echo "=== XCODE ==="
-          xcodebuild -version
-          echo "=== CLANG ==="
-          clang --version
-          echo "=== SDK ==="
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "$SDK"
-          echo "=== DISPATCH BASE.H ==="
-          sed -n '135,155p' "$SDK/usr/include/dispatch/base.h"
-
-      - name: Inspect iSH Build Settings
-        run: |
-          echo "=== TARGET BUILD SETTINGS ==="
-          xcodebuild             -project ish.xcodeproj             -scheme iSH-ARM64             -showBuildSettings             | grep -E "OTHER_CFLAGS|GCC_PREPROCESSOR_DEFINITIONS|HEADER_SEARCH_PATHS|CLANG_C|SWIFT"
+          set -euo pipefail
+          SETTINGS=$(xcodebuild \
+            -project iSH.xcodeproj \
+            -scheme iSH-ARM64 \
+            -configuration Release \
+            -showBuildSettings)
+          echo "$SETTINGS" | grep 'GCC_PREPROCESSOR_DEFINITIONS' | head -1
+          echo "$SETTINGS" | grep -q 'USE_XTERM_RENDERER=1'
+          echo 'xterm renderer enabled for iSH-ARM64'
 
       - name: Build iSH ARM64
         run: |
           set -o pipefail
+          rm -rf build-arm64
           xcodebuild \
             -project iSH.xcodeproj \
             -scheme iSH-ARM64 \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
+            -derivedDataPath build-arm64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee xcode-build.log
 
       - name: Show build errors
         if: failure()
-        run: |
-          echo "===== XCODE BUILD ERRORS ====="
-          grep -E "error:|fatal error:|BUILD FAILED" xcode-build.log | tail -50 || true
+        run: grep -E 'error:|fatal error:|BUILD FAILED' xcode-build.log | tail -100 || true
 
-      - name: Find app
-        if: success()
+      - name: Locate built app
         run: |
-          find . -name "*.app" -type d -print
+          set -euo pipefail
+          APP=$(find build-arm64/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$APP"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          echo "Built app: $APP"
+
+      - name: Verify terminal resources
+        run: |
+          set -euo pipefail
+          test -f "$APP/xterm-term.html"
+          test -f "$APP/xterm-term-bridge.js"
+          test -f "$APP/xterm-vendor/xterm-classic.js"
+          test -f "$APP/xterm-vendor/addon-canvas.js"
+          test -f "$APP/xterm-vendor/xterm.css"
+          test -f "$APP/term.css"
+          echo 'Required xterm terminal resources are packaged.'
 
       - name: Package IPA
-        shell: bash
         run: |
-          set -e
-
-          echo "===== SEARCHING APP ====="
-
-          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name "*.app" 2>/dev/null | grep "Build/Products" | head -1 || true)
-
-          if [ -z "$APP" ]; then
-            echo "No .app found in DerivedData"
-            echo "===== ALL APP FILES ====="
-            find "$HOME/Library/Developer/Xcode/DerivedData" -type d -name "*.app" 2>/dev/null || true
-            exit 1
-          fi
-
-          echo "APP FOUND:"
-          echo "$APP"
-
-          rm -rf Payload
+          set -euo pipefail
+          rm -rf Payload iSH-ARM64.ipa
           mkdir -p Payload
-
           cp -R "$APP" Payload/
-
-          echo "===== CREATING IPA ====="
           /usr/bin/zip -qry iSH-ARM64.ipa Payload
-
-          echo "===== IPA CREATED ====="
+          unzip -l iSH-ARM64.ipa | grep -E 'xterm-term.html|xterm-term-bridge.js|xterm-classic.js|addon-canvas.js|xterm.css|term.css'
           ls -lh iSH-ARM64.ipa
 
-      - name: Inspect IPA
-        run: |
-          echo "===== PAYLOAD ====="
-          find Payload -maxdepth 4 -print 2>/dev/null || true
-
-          echo "===== APP EXECUTABLE ====="
-          find Payload -type f -perm -111 -print 2>/dev/null || true
-
-          echo "===== APP INFO ====="
-          APP=$(find Payload -type d -name "*.app" | head -1)
-          if [ -n "$APP" ]; then
-            echo "APP=$APP"
-            /usr/bin/file "$APP"/*
-          fi
-
       - name: Upload IPA
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: iSH-ARM64-IPA
