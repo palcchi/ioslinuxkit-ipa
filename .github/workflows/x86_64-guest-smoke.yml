@@ -129,8 +129,11 @@ jobs:
           rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip
           cp -a jammy-root bds-root
 
-          # Ubuntu Base intentionally omits the C++ runtime. Install the Jammy
-          # runtime inside the x86_64 rootfs while CI itself can chroot natively.
+          # Ubuntu Base intentionally omits the C++ runtime and can also omit a
+          # usable /tmp. apt runs helper processes as _apt, so make its temp
+          # directory explicitly world-writable with the normal sticky bit.
+          mkdir -p bds-root/tmp
+          chmod 1777 bds-root/tmp
           cp /etc/resolv.conf bds-root/etc/resolv.conf
           sudo chroot bds-root /bin/sh -c 'apt-get update >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libstdc++6 libgcc-s1 ca-certificates >/dev/null'
           rm -rf bds-root/var/lib/apt/lists/*
