@@ -1,0 +1,142 @@
+name: V-MINE BDS Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - x86_64-guest
+    paths:
+      - 'meson.build'
+      - 'meson_options.txt'
+      - 'emu/**'
+      - 'kernel/**'
+      - 'fs/**'
+      - 'vdso/x86_64/**'
+      - 'xX_main_Xx.h'
+      - 'tests/x86_64/**'
+      - '.github/workflows/v-mine-bds-smoke.yml'
+
+jobs:
+  bds-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Apply x86_64 compatibility patches
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do
+            python3 "$p"
+          done
+
+      - name: Install host dependencies
+        run: |
+          sudo dpkg --add-architecture amd64
+          sudo apt-get update
+          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev unzip
+
+      - name: Build V-MINE x86_64 runtime
+        run: |
+          meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
+          ninja -C build-x86_64
+
+      - name: Build Jammy plus official BDS rootfs
+        run: |
+          set -euo pipefail
+          BDS_VERSION=1.26.44.3
+          BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BDS_VERSION}.zip"
+
+          wget -q -O jammy-base.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
+          rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip bds-debs
+          mkdir bds-root
+          tar -xzf jammy-base.tar.gz -C bds-root
+
+          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/vmine-jammy.list >/dev/null
+          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe
+          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe
+          deb [arch=amd64] http://security.ubuntu.com/ubuntu jammy-security main universe
+          EOF
+          sudo apt-get update >/dev/null
+          mkdir bds-debs
+          (
+            cd bds-debs
+            apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
+            apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
+          )
+          for deb in bds-debs/*.deb; do
+            dpkg-deb -x "$deb" bds-root
+          done
+
+          wget -q -O bds.zip "$BDS_URL"
+          unzip -q bds.zip -d bds-root
+          chmod 0755 bds-root/bedrock_server
+
+          echo '=== HOST ROOTFS CHECK ==='
+          ls -lh bds-root/bedrock_server
+          file bds-root/bedrock_server
+          readelf -l bds-root/bedrock_server | grep -E 'interpreter|Requesting' || true
+          ls -l bds-root/lib64/ld-linux-x86-64.so.2 || true
+          ls -l bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 || true
+
+          tar --numeric-owner -C bds-root -cf bds-rootfs.tar .
+          ./build-x86_64/tools/fakefsify bds-rootfs.tar bds-fakefs
+
+      - name: Verify BDS fakefs guest visibility
+        run: |
+          set -euo pipefail
+          echo '=== JAMMY ECHO INSIDE BDS ROOTFS ==='
+          timeout 20 ./build-x86_64/ish -f bds-fakefs /bin/echo 'V-MINE ROOTFS OK'
+
+          echo '=== GUEST LS BDS ==='
+          timeout 20 ./build-x86_64/ish -f bds-fakefs /bin/ls -l /bedrock_server
+
+          echo '=== GUEST LOADER VERSION ==='
+          timeout 20 ./build-x86_64/ish -f bds-fakefs /lib64/ld-linux-x86-64.so.2 --version | head -n 4
+
+      - name: Run BDS through explicit dynamic loader
+        id: loader
+        continue-on-error: true
+        run: |
+          set +e
+          timeout 60 ./build-x86_64/ish -f bds-fakefs -d / /lib64/ld-linux-x86-64.so.2 /bedrock_server >bds-loader.log 2>&1
+          rc=$?
+          set -e
+          cat bds-loader.log
+          echo "EXPLICIT_LOADER_RC=$rc"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Run BDS through normal ELF exec
+        id: normal
+        continue-on-error: true
+        run: |
+          set +e
+          timeout 90 ./build-x86_64/ish -f bds-fakefs -d / /bedrock_server >bds-normal.log 2>&1
+          rc=$?
+          set -e
+          cat bds-normal.log
+          echo "NORMAL_EXEC_RC=$rc"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate V-MINE BDS frontier
+        run: |
+          set -euo pipefail
+          cat bds-loader.log bds-normal.log >bds-combined.log
+          if grep -Eqi 'Server started|IPv4 supported|19132|Dedicated Server' bds-combined.log; then
+            echo 'V-MINE OFFICIAL BDS STARTUP REACHED'
+            exit 0
+          fi
+          echo '=== FIRST BDS FRONTIER ==='
+          grep -E -m1 -B8 -A24 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal|x86-gpf|x86-undefined' bds-combined.log || tail -n 120 bds-combined.log
+          exit 1
+
+      - name: Upload BDS logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v-mine-bds-logs
+          path: |
+            bds-loader.log
+            bds-normal.log
