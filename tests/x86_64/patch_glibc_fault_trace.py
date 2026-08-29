@@ -27,6 +27,16 @@ new = '''#ifdef GUEST_X86_64
                     (unsigned long long)x86_64_get_reg(cpu, X86_64_R9),
                     (unsigned long long)x86_64_get_reg(cpu, X86_64_R10),
                     (unsigned long long)x86_64_get_reg(cpu, X86_64_R11));
+            fprintf(stderr, "[x86-gpf-bytes]");
+            for (int xi = -12; xi < 20; xi++) {
+                uint8_t xb = 0;
+                if (user_get(cpu->pc + xi, xb))
+                    fprintf(stderr, " ??");
+                else
+                    fprintf(stderr, " %02x", xb);
+            }
+            fprintf(stderr, "\\n");
+            dump_maps();
 #endif
             struct siginfo_ info = {
                 .code = mem_segv_reason(current->mem, cpu->segfault_addr),
@@ -36,4 +46,4 @@ new = '''#ifdef GUEST_X86_64
 if old not in s:
     raise SystemExit("GPF siginfo anchor not found")
 p.write_text(s.replace(old, new, 1))
-print("patched x86_64 GPF diagnostics")
+print("patched x86_64 GPF diagnostics with bytes/maps")
