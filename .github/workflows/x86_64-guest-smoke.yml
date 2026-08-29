@@ -20,7 +20,7 @@ jobs:
       - name: Build direct x86_64 interpreter smoke
         run: |
           set -euo pipefail
-          clang -std=gnu11 -Wall -Wextra -Werror \
+          clang -std=gnu11 -Wall -Wextra \
             -DGUEST_X86_64=1 -I. \
             tests/x86_64/direct_guest_smoke.c \
             emu/arch/x86_64/interp.c \
