@@ -41,8 +41,6 @@ static void test_exact_movups_sib(void) {
 
     // Exact instruction shape observed in Jammy /bin/ls:
     //   0f 10 64 16 08    movups 0x8(%rsi,%rdx,1), %xmm4
-    // Follow it with exit(0), so cpu_run_to_interrupt gives us a clean
-    // boundary after the SSE instruction executes.
     const uint8_t program[] = {
         0x0f,0x10,0x64,0x16,0x08,
         0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
@@ -79,6 +77,44 @@ static void test_exact_movups_sib(void) {
         assert(cpu.xmm[4].u8[i] == (uint8_t)(0xa0 + i));
 
     puts("DIRECT X86_64 MOVUPS SIB: PASS");
+}
+
+static void test_exact_pminub(void) {
+    memset(memory, 0, sizeof(memory));
+
+    // Exact frontier observed in Jammy /bin/ls:
+    //   66 0f da 2f       pminub (%rdi), %xmm5
+    const uint8_t program[] = {
+        0x66,0x0f,0xda,0x2f,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x48,0x31,0xff,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+
+    const addr_t src = BASE + 0x300;
+    struct mmu mmu = {
+        .ops = &ops,
+        .asbestos = NULL,
+        .changes = 0,
+    };
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    x86_64_set_reg(&cpu, X86_64_RDI, src);
+
+    for (unsigned i = 0; i < 16; i++) {
+        cpu.xmm[5].u8[i] = (uint8_t)(0x80 + i);
+        memory[(src - BASE) + i] = (i & 1) ? (uint8_t)(0xf0 + i) : (uint8_t)(0x10 + i);
+    }
+
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(cpu.x86_last_syscall == 60);
+    for (unsigned i = 0; i < 16; i++) {
+        uint8_t expected = (i & 1) ? (uint8_t)(0x80 + i) : (uint8_t)(0x10 + i);
+        assert(cpu.xmm[5].u8[i] == expected);
+    }
+
+    puts("DIRECT X86_64 PMINUB: PASS");
 }
 
 static void test_write_exit(void) {
@@ -125,6 +161,7 @@ static void test_write_exit(void) {
 
 int main(void) {
     test_exact_movups_sib();
+    test_exact_pminub();
     test_write_exit();
     return 0;
 }
