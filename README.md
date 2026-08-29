@@ -1,20 +1,33 @@
-# ios-linuxkit
+# V-MINE
+
+**V-MINE** is the BDS-focused iOS/iPadOS direction of this branch. It uses the project's direct x86_64 guest runtime to run Mojang's official Linux Bedrock Dedicated Server on ARM64 iOS hardware, while presenting a native server-management UI instead of a general Linux terminal.
+
+The target product covers server install/update from official Minecraft/Mojang sources, Start/Stop, console, world management, backups, player management and `server.properties` settings. See [`docs/V-MINE.md`](docs/V-MINE.md) for the product/runtime plan.
+
+V-MINE is an independent project and is not affiliated with or endorsed by Mojang Studios or Microsoft.
+
+## Runtime foundation
 
 ![ios-linuxkit icon](docs/icon-256.png)
 
-`ios-linuxkit` runs an AArch64 Linux userland inside an iOS app and as a command-line process on an AArch64 Linux host. It derives from [iSH](https://ish.app/) and uses iSH's userspace kernel, filesystems and Asbestos threaded-code interpreter.
+The runtime derives from `ios-linuxkit`/iSH and uses iSH's userspace kernel, filesystems and Asbestos threaded-code interpreter. The `x86_64-guest` branch extends that foundation with a direct x86_64 compatibility path aimed first at Bedrock Dedicated Server rather than general-purpose x86_64 Linux compatibility.
 
-The current source version is **2.1.1** with Apple build number **807**. The repository supports one guest architecture: ARM64. The interpreter decodes guest instructions into programs of pointers to precompiled host functions. All executable host instructions come from the built application; the interpreter allocates only data for translated programs.
+The current source version is **2.1.1** with Apple build number **807**. The existing ARM64 runtime remains the stable foundation while the BDS-focused x86_64 compatibility work is developed on this branch.
 
 ## What is in the repository
 
-- an ARM64 instruction decoder and AArch64 host gadgets under `asbestos/guest-arm64/`;
+- the existing ARM64 instruction decoder and AArch64 host gadgets under `asbestos/guest-arm64/`;
+- the developing direct x86_64 guest compatibility path used by V-MINE;
 - a 48-bit guest address space, Linux syscall layer, signals, sockets and fakefs;
-- the `iSH-ARM64` iOS application target, Ghostty Web terminal frontend and an `iSH-ARM64-ffmpeg` integration target;
+- the iOS application host and terminal frontend inherited from the runtime project;
 - Linux-host builds for development and regression testing;
-- staged tests for instructions, syscalls, language runtimes and command-line packages.
+- staged tests for instructions, syscalls, dynamic glibc programs and Bedrock Dedicated Server compatibility.
 
-The iOS app is a reference terminal and packaging target. The outer iOS sandbox is the security boundary; read [SECURITY.md](SECURITY.md) before embedding the runtime or exposing guest workloads to untrusted input.
+The outer iOS sandbox is the security boundary; read [SECURITY.md](SECURITY.md) before embedding the runtime or exposing guest workloads to untrusted input.
+
+## V-MINE compatibility target
+
+The BDS runtime is considered complete only when the official server can start, create/load a world, listen on its Bedrock UDP port, accept a client, save correctly, process console commands and stop cleanly. Compatibility work should prioritize instructions and Linux behavior actually exercised by BDS instead of attempting to support arbitrary x86_64 desktop software.
 
 ## Quick start on AArch64 Linux
 
@@ -69,12 +82,11 @@ curl -LO https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-min
 
 The runtime and CLI targets can install packages into their fakefs. Use a disposable copy when package state matters. Reports are written to `REPORT_DIR`, which defaults to `/workspace/tmp`.
 
-[The July 2026 OpenMinis audit](docs/reports/audits/OPENMINIS_AUDIT_2026-07-20.md) records the repository-wide comparison at `35dac743` and the AdvSIMD conversion follow-up at `40f1bf40`. The follow-up added `FCVTN`, `FCVTN2`, `FCVTXN` and `FCVTXN2`; clean Clang release and debug builds and the native-oracle/guest fixture passed. The earlier broad suite reached 82/83 because the tested rootfs Clojure package lacked `clojure.main`.
-
 ## Documentation
 
 | Document | Use it for |
 |---|---|
+| [V-MINE plan](docs/V-MINE.md) | BDS-only product scope, runtime target, update flow and native UI. |
 | [Documentation index](docs/README.md) | Choosing the maintained guide or dated report. |
 | [Architecture](docs/ARCHITECTURE.md) | Interpreter, memory, kernel and host boundaries. |
 | [Linux development](docs/LINUX_DEVELOPMENT.md) | Building, fakefs creation, command-line use and diagnostics. |
@@ -88,4 +100,4 @@ Dated benchmark, workload, release and audit records live under [`docs/reports/`
 
 ## Licence and provenance
 
-`ios-linuxkit` contains work derived from [ish-app/ish](https://github.com/ish-app/ish) and its dependencies. See [LICENSE.md](LICENSE.md), [LICENSE.IOS](LICENSE.IOS), the [preserved May 2026 README](docs/legacy/ORIGINAL_ISH_README_2026-05.md), and [`docs/legacy/`](docs/legacy/).
+V-MINE's runtime contains work derived from [ish-app/ish](https://github.com/ish-app/ish), ios-linuxkit and their dependencies. See [LICENSE.md](LICENSE.md), [LICENSE.IOS](LICENSE.IOS), the [preserved May 2026 README](docs/legacy/ORIGINAL_ISH_README_2026-05.md), and [`docs/legacy/`](docs/legacy/).
