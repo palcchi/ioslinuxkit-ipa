@@ -21,8 +21,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Apply glibc bring-up patch
-        run: python3 tests/x86_64/patch_glibc_bringup.py
+      - name: Apply glibc bring-up patches
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do python3 "$p"; done
       - name: Build direct x86_64 interpreter smoke
         run: |
           set -euo pipefail
@@ -41,8 +43,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Apply glibc bring-up patch
-        run: python3 tests/x86_64/patch_glibc_bringup.py
+      - name: Apply glibc bring-up patches
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do python3 "$p"; done
       - name: Install build dependencies
         run: |
           sudo apt-get update
