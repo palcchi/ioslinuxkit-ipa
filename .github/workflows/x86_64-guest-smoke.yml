@@ -38,7 +38,7 @@ jobs:
 
   linuxkit-host-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +50,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev
+          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev unzip
       - name: Configure direct x86_64 guest LinuxKit
         run: meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
       - name: Build LinuxKit x86_64 guest host binary
@@ -115,8 +115,52 @@ jobs:
           echo "JAMMY_GUEST_RC=$rc"
           if grep -q '^HELLO JAMMY GLIBC$' jammy-guest.log; then
             echo 'JAMMY GLIBC X86_64 GUEST: PASS'
+          else
+            echo '--- first unsupported/failure context ---'
+            grep -E -m1 -B3 -A8 'illegal instruction|segmentation|CPU ISA|not found|not implemented|undefined' jammy-guest.log || true
+            exit 1
+          fi
+
+      - name: Download and inspect official Bedrock Dedicated Server
+        run: |
+          set -euo pipefail
+          BDS_VERSION=1.26.44.3
+          BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BDS_VERSION}.zip"
+          rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip
+          cp -a jammy-root bds-root
+          mkdir -p bds-root/opt/bds
+          wget -O bds.zip "$BDS_URL"
+          unzip -q bds.zip -d bds-root/opt/bds
+          chmod +x bds-root/opt/bds/bedrock_server
+          echo '--- BDS binary ---'
+          file bds-root/opt/bds/bedrock_server
+          readelf -h bds-root/opt/bds/bedrock_server | grep -E 'Class:|Machine:|Type:'
+          echo '--- BDS interpreter ---'
+          readelf -l bds-root/opt/bds/bedrock_server | grep -E 'interpreter|Requesting' || true
+          echo '--- BDS NEEDED libraries ---'
+          readelf -d bds-root/opt/bds/bedrock_server | grep NEEDED || true
+          echo '--- Host ldd view ---'
+          ldd bds-root/opt/bds/bedrock_server || true
+
+      - name: Build Bedrock Dedicated Server fakefs
+        run: |
+          set -euo pipefail
+          tar --numeric-owner -C bds-root -cf bds-rootfs.tar .
+          ./build-x86_64/tools/fakefsify bds-rootfs.tar bds-fakefs
+
+      - name: Run official Bedrock Dedicated Server through x86_64 guest
+        run: |
+          set -euo pipefail
+          set +e
+          timeout 75 ./build-x86_64/ish -f bds-fakefs /bin/sh -c 'cd /opt/bds && LD_LIBRARY_PATH=. ./bedrock_server' >bds-guest.log 2>&1
+          rc=$?
+          set -e
+          cat bds-guest.log
+          echo "BDS_GUEST_RC=$rc"
+          if grep -Eqi 'server started|IPv4 supported|19132|Dedicated Server' bds-guest.log; then
+            echo 'OFFICIAL BEDROCK SERVER X86_64 GUEST: STARTUP REACHED'
             exit 0
           fi
-          echo '--- first unsupported/failure context ---'
-          grep -E -m1 -B3 -A8 'illegal instruction|segmentation|CPU ISA|not found|not implemented|undefined' jammy-guest.log || true
+          echo '--- Bedrock first failure/frontier ---'
+          grep -E -m1 -B5 -A12 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal' bds-guest.log || true
           exit 1
