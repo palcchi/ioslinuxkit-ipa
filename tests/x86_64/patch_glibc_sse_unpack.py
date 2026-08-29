@@ -4,12 +4,12 @@ from pathlib import Path
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
 anchor = '''            // SYSCALL.\n'''
-insert = r'''            // 66 0F 60/61/62 and 68/69/6A: unpack/interleave packed
-            // bytes, words and dwords. glibc uses these in its SSE2 baseline
-            // routines even on a deliberately conservative x86_64 CPU.
+insert = r'''            // 66 0F 60/61/62/6C and 68/69/6A/6D: unpack/interleave
+            // packed bytes, words, dwords and qwords. glibc uses these in its
+            // SSE2 baseline routines even on a deliberately conservative CPU.
             if (operand16 &&
-                (op2 == 0x60 || op2 == 0x61 || op2 == 0x62 ||
-                 op2 == 0x68 || op2 == 0x69 || op2 == 0x6a)) {
+                (op2 == 0x60 || op2 == 0x61 || op2 == 0x62 || op2 == 0x6c ||
+                 op2 == 0x68 || op2 == 0x69 || op2 == 0x6a || op2 == 0x6d)) {
                 struct rm_operand rm;
                 unsigned xmm;
                 addr_t next;
@@ -36,12 +36,16 @@ insert = r'''            // 66 0F 60/61/62 and 68/69/6A: unpack/interleave packe
                         dst.u16[i * 2] = old.u16[base + i];
                         dst.u16[i * 2 + 1] = src.u16[base + i];
                     }
-                } else {
+                } else if (op2 == 0x62 || op2 == 0x6a) {
                     unsigned base = op2 == 0x62 ? 0 : 2;
                     for (unsigned i = 0; i < 2; i++) {
                         dst.u32[i * 2] = old.u32[base + i];
                         dst.u32[i * 2 + 1] = src.u32[base + i];
                     }
+                } else {
+                    unsigned base = op2 == 0x6c ? 0 : 1;
+                    dst.u64[0] = old.u64[base];
+                    dst.u64[1] = src.u64[base];
                 }
                 cpu->xmm[xmm] = dst;
                 cpu->pc = next;
