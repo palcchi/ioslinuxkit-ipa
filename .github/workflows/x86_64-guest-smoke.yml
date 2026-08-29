@@ -14,6 +14,7 @@ on:
 jobs:
   direct-interpreter:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Build direct x86_64 interpreter smoke
