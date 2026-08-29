@@ -92,6 +92,7 @@ window.addEventListener('load', async () => {
         const terminalOptions = {
             cols: 80,
             rows: 24,
+            renderer: "canvas",
             allowTransparency: false,
             cursorBlink: styleState.blinkCursor,
             cursorStyle: cursorStyleForGhostty(styleState.cursorShape),
