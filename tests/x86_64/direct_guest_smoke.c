@@ -101,11 +101,12 @@ static void test_exact_imul_imm(void) {
     memset(memory, 0, sizeof(memory));
 
     // Same REX/opcode/ModRM frontier observed in Jammy /bin/ls:
-    //   49 69 fc 03 00 00 00    imul $3, %r12, %r15
-    // Also exercise the compact 6B imm8 form immediately after it.
+    //   49 69 fc 03 00 00 00    imul $3, %r12, %rdi
+    // Then exercise REX.R + REX.B with the compact 6B imm8 form:
+    //   4d 6b fc fe             imul $-2, %r12, %r15
     const uint8_t program[] = {
         0x49,0x69,0xfc,0x03,0x00,0x00,0x00,
-        0x4d,0x6b,0xff,0xfe,
+        0x4d,0x6b,0xfc,0xfe,
         0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
         0x48,0x31,0xff,
         0x0f,0x05,
@@ -119,7 +120,8 @@ static void test_exact_imul_imm(void) {
     int interrupt = cpu_run_to_interrupt(&cpu, NULL);
     assert(interrupt == INT_SYSCALL);
     assert(cpu.x86_last_syscall == 60);
-    assert(x86_64_get_reg(&cpu, X86_64_R15) == (uint64_t)-42);
+    assert(x86_64_get_reg(&cpu, X86_64_RDI) == 21);
+    assert(x86_64_get_reg(&cpu, X86_64_R15) == (uint64_t)-14);
     puts("DIRECT X86_64 IMUL IMM: PASS");
 }
 
