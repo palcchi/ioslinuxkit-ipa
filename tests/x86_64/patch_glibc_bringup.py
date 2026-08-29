@@ -42,6 +42,58 @@ insert = r'''            // Minimal SSE/SSE2 data movement for the glibc loader.
                 continue;
             }
 
+            // 66 0F 6C/6D /r: PUNPCKLQDQ/PUNPCKHQDQ.
+            if (operand16 && (op2 == 0x6c || op2 == 0x6d)) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, sizeof(src)) < 0) {
+                    goto gpf;
+                }
+                uint64_t old_lo = cpu->xmm[xmm].u64[0];
+                uint64_t old_hi = cpu->xmm[xmm].u64[1];
+                if (op2 == 0x6c) {
+                    cpu->xmm[xmm].u64[0] = old_lo;
+                    cpu->xmm[xmm].u64[1] = src.u64[0];
+                } else {
+                    cpu->xmm[xmm].u64[0] = old_hi;
+                    cpu->xmm[xmm].u64[1] = src.u64[1];
+                }
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
+            // 66 0F 70 /r ib: PSHUFD xmm, xmm/m128, imm8.
+            if (operand16 && op2 == 0x70) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src, dst;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 1, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, sizeof(src)) < 0) {
+                    goto gpf;
+                }
+                uint8_t imm;
+                if (fetch_u8(cpu, next - 1, &imm) < 0) goto gpf;
+                for (unsigned lane = 0; lane < 4; lane++)
+                    dst.u32[lane] = src.u32[(imm >> (lane * 2)) & 3];
+                cpu->xmm[xmm] = dst;
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
             // 66 0F EF /r: PXOR xmm, xmm/m128.
             if (operand16 && op2 == 0xef) {
                 struct rm_operand rm;
@@ -109,6 +161,26 @@ insert = r'''            // Minimal SSE/SSE2 data movement for the glibc loader.
                 }
                 cpu->xmm[xmm].u128 = 0;
                 cpu->xmm[xmm].u64[0] = value;
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
+            // 66 0F D6 /r: MOVQ xmm -> xmm/m64.
+            if (operand16 && op2 == 0xd6) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                uint64_t value = cpu->xmm[xmm].u64[0];
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    cpu->xmm[rm.reg].u128 = 0;
+                    cpu->xmm[rm.reg].u64[0] = value;
+                } else if (guest_write(cpu, rm.addr, &value, sizeof(value)) < 0) {
+                    goto gpf;
+                }
                 cpu->pc = next;
                 cpu->cycle++;
                 continue;
