@@ -11,8 +11,7 @@
 #endif
 
 // Architectural register numbering follows the low three ModRM register bits,
-// extended by REX.R/REX.B. RSP is kept in cpu->sp so existing 64-bit kernel
-// exec code can initialize the stack without an architecture-specific fork.
+// extended by REX.R/REX.B.
 enum x86_64_reg {
     X86_64_RAX = 0,
     X86_64_RCX = 1,
@@ -46,9 +45,37 @@ struct cpu_state {
     struct mmu *mmu;
     long cycle;
 
-    // Native x86_64 architectural GPRs. RSP lives in sp below.
-    uint64_t x86_regs[16];
-    uint64_t sp;
+    // Native x86_64 architectural GPRs. Keep named aliases for a few legacy
+    // shared-kernel paths while the architecture split is being completed.
+    union {
+        uint64_t x86_regs[16];
+        struct {
+            union { uint64_t rax; uint64_t eax; };
+            uint64_t rcx;
+            uint64_t rdx;
+            uint64_t rbx;
+            uint64_t rsp_slot; // architectural RSP is cpu->sp below
+            uint64_t rbp;
+            uint64_t rsi;
+            uint64_t rdi;
+            uint64_t r8;
+            uint64_t r9;
+            uint64_t r10;
+            uint64_t r11;
+            uint64_t r12;
+            uint64_t r13;
+            uint64_t r14;
+            uint64_t r15;
+        };
+    };
+
+    // Shared 64-bit kernel code already expects a member named sp. The esp
+    // alias is temporary compatibility for older fork code; both are 64-bit in
+    // this backend so cloning cannot truncate a guest stack address.
+    union {
+        uint64_t sp;
+        uint64_t esp;
+    };
 
     union {
         uint64_t rip;
@@ -57,8 +84,8 @@ struct cpu_state {
 
     uint64_t rflags;
 
-    // Canonical flag bytes. Keeping these named fields also lets shared kernel
-    // diagnostics compile while the x86_64 signal ABI is brought up.
+    // Canonical flag bytes. Keeping these named fields lets shared diagnostics
+    // compile while the real x86_64 signal frame ABI is brought up.
     uint8_t nf;
     uint8_t zf;
     uint8_t cf;
@@ -72,6 +99,7 @@ struct cpu_state {
     uint32_t fpcr;
     uint32_t fpsr;
 
+    // FS base for Linux x86_64 TLS during bring-up.
     uint64_t tls_ptr;
 
     addr_t segfault_addr;
@@ -81,11 +109,10 @@ struct cpu_state {
     bool *poked_ptr;
     bool _poked;
 
-    // Shared-kernel syscall compatibility view. The direct interpreter maps
-    // Linux x86_64 syscall registers/numbers into this view before returning
-    // INT_SYSCALL. This keeps the existing userspace-kernel syscall handlers
-    // reusable while x86_64-specific tables and structures are implemented.
-    uint64_t regs[16];
+    // Shared-kernel syscall compatibility view. Keep 32 slots because some
+    // ARM64-only diagnostic code still indexes x19-x30 even when it is inert on
+    // the x86_64 path. Architectural x86_64 state remains in x86_regs above.
+    uint64_t regs[32];
     bool x86_syscall_pending;
     uint64_t x86_last_syscall;
 };
