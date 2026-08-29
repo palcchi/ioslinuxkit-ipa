@@ -6,8 +6,12 @@ on:
     branches:
       - x86_64-guest
     paths:
-      - 'emu/cpu.h'
-      - 'emu/arch/x86_64/**'
+      - 'meson.build'
+      - 'meson_options.txt'
+      - 'emu/**'
+      - 'asbestos/x86_64_stub.c'
+      - 'kernel/**'
+      - 'vdso/x86_64/**'
       - 'tests/x86_64/**'
       - '.github/workflows/x86_64-guest-smoke.yml'
 
@@ -27,3 +31,21 @@ jobs:
             -o x86_64-direct-smoke
       - name: Run direct x86_64 interpreter smoke
         run: ./x86_64-direct-smoke
+
+  linuxkit-host-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev
+      - name: Configure direct x86_64 guest LinuxKit
+        run: |
+          meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=debug
+      - name: Build LinuxKit x86_64 guest host binary
+        run: |
+          ninja -C build-x86_64
