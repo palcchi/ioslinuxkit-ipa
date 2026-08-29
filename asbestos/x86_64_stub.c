@@ -1,5 +1,17 @@
+#include <signal.h>
 #include <stdlib.h>
 #include "asbestos/asbestos.h"
+
+// Shared memory/TLB code still exposes a handful of ARM64-JIT diagnostics.
+// The direct x86_64 interpreter has no JIT, so these are inert compatibility
+// hooks rather than dragging the ARM64 threaded-code backend into the build.
+__thread volatile sig_atomic_t in_jit;
+volatile addr_t g_watch_page_val = 0;
+
+void c_watch_write_hit(addr_t addr, const char *caller) {
+    (void) addr;
+    (void) caller;
+}
 
 // The direct x86_64 interpreter does not generate threaded-code fiber blocks.
 // Keep the MMU-facing asbestos lifecycle hooks available so the shared memory
