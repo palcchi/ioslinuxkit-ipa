@@ -122,8 +122,10 @@ test_insert = r'''static void test_cvtsi2s(void) {
 if test_anchor not in t:
     raise SystemExit("direct smoke function anchor missing")
 t = t.replace(test_anchor, test_insert + test_anchor, 1)
-main_anchor = '''    test_ucomi_flags();\n    test_write_exit();\n'''
-main_replace = '''    test_ucomi_flags();\n    test_cvtsi2s();\n    test_write_exit();\n'''
+# Keep the test-call insertion composable with earlier bring-up patches such as
+# F6 byte DIV, which also insert a regression immediately before write_exit.
+main_anchor = '''    test_write_exit();\n'''
+main_replace = '''    test_cvtsi2s();\n    test_write_exit();\n'''
 if main_anchor not in t:
     raise SystemExit("direct smoke main anchor missing")
 t = t.replace(main_anchor, main_replace, 1)
