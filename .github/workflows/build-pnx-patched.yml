@@ -41,20 +41,23 @@ jobs:
           PY
           grep -n 'floorMod' pnx/src/main/java/org/powernukkitx/level/generator/stages/normal/NormalSurfaceOverwriteStage.java
 
-      - name: Build patched server
+      - name: Build patched runnable server JAR
         working-directory: pnx
         run: |
           chmod +x gradlew
-          ./gradlew assemble --no-daemon --parallel --max-workers=2 --stacktrace
+          ./gradlew shadowJar --no-daemon --parallel --max-workers=2 --stacktrace
 
       - name: Prepare patched JAR
         run: |
           set -euo pipefail
           mkdir -p artifact
-          JAR=$(find pnx/build/libs -maxdepth 1 -type f -name '*.jar' -printf '%s\t%p\n' | sort -nr | head -1 | cut -f2-)
-          test -n "$JAR"
+          JAR='pnx/build/powernukkitx.jar'
+          test -f "$JAR"
           cp "$JAR" artifact/powernukkitx-3.0.3-ioslinuxkit-patched.jar
-          test $(stat -c%s artifact/powernukkitx-3.0.3-ioslinuxkit-patched.jar) -gt 10000000
+          SIZE=$(stat -c%s artifact/powernukkitx-3.0.3-ioslinuxkit-patched.jar)
+          echo "Patched runnable JAR size: $SIZE bytes"
+          test "$SIZE" -gt 10000000
+          unzip -p artifact/powernukkitx-3.0.3-ioslinuxkit-patched.jar META-INF/MANIFEST.MF | grep -q 'Main-Class: org.powernukkitx.JarStart'
           sha256sum artifact/powernukkitx-3.0.3-ioslinuxkit-patched.jar
           ls -lh artifact/powernukkitx-3.0.3-ioslinuxkit-patched.jar
 
