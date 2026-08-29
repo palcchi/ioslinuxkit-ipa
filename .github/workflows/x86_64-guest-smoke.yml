@@ -1,0 +1,28 @@
+name: x86_64 Direct Guest Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - x86_64-guest
+    paths:
+      - 'emu/cpu.h'
+      - 'emu/arch/x86_64/**'
+      - 'tests/x86_64/**'
+      - '.github/workflows/x86_64-guest-smoke.yml'
+
+jobs:
+  direct-interpreter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct x86_64 interpreter smoke
+        run: |
+          set -euo pipefail
+          clang -std=gnu11 -Wall -Wextra -Werror \
+            -DGUEST_X86_64=1 -I. \
+            tests/x86_64/direct_guest_smoke.c \
+            emu/arch/x86_64/interp.c \
+            -o x86_64-direct-smoke
+      - name: Run direct x86_64 interpreter smoke
+        run: ./x86_64-direct-smoke
