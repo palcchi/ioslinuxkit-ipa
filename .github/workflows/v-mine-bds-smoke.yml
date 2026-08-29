@@ -63,6 +63,7 @@ jobs:
           mkdir bds-debs
           (
             cd bds-debs
+            apt-get download libc6:amd64/jammy-updates || apt-get download libc6:amd64/jammy
             apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
             apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
           )
@@ -78,8 +79,11 @@ jobs:
           ls -lh bds-root/bedrock_server
           file bds-root/bedrock_server
           readelf -l bds-root/bedrock_server | grep -E 'interpreter|Requesting' || true
+          echo '=== LOADER CANDIDATES ==='
+          find bds-root -type f \( -name 'ld-linux-x86-64.so.2' -o -name 'ld-2.35.so' \) -print || true
           ls -l bds-root/lib64/ld-linux-x86-64.so.2 || true
           ls -l bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 || true
+          test -e bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
 
           tar --numeric-owner -C bds-root -cf bds-rootfs.tar .
           ./build-x86_64/tools/fakefsify bds-rootfs.tar bds-fakefs
