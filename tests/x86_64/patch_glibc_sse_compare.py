@@ -4,7 +4,85 @@ from pathlib import Path
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
 anchor = '''            // SYSCALL.\n'''
-insert = r'''            // 66 0F 74/75/76 /r: PCMPEQB/W/D xmm, xmm/m128.
+insert = r'''            // 0F 2E/2F /r: UCOMISS/COMISS xmm, xmm/m32.
+            // 66 0F 2E/2F /r: UCOMISD/COMISD xmm, xmm/m64.
+            // COMI and UCOMI differ in which NaNs raise an unmasked SIMD
+            // exception. MXCSR exceptions are not modeled yet, but their
+            // architectural ZF/PF/CF comparison results are the same.
+            if (!rep_prefix && (op2 == 0x2e || op2 == 0x2f)) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+
+                bool unordered = false;
+                bool less = false;
+                bool equal = false;
+                if (operand16) {
+                    uint64_t lhs_raw = cpu->xmm[xmm].u64[0];
+                    uint64_t rhs_raw;
+                    if (rm.is_reg) {
+                        if (rm.reg >= 16) goto undefined;
+                        rhs_raw = cpu->xmm[rm.reg].u64[0];
+                    } else if (guest_read(cpu, rm.addr, &rhs_raw, sizeof(rhs_raw)) < 0) {
+                        goto gpf;
+                    }
+                    bool lhs_nan = (lhs_raw & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL &&
+                                   (lhs_raw & 0x000fffffffffffffULL) != 0;
+                    bool rhs_nan = (rhs_raw & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL &&
+                                   (rhs_raw & 0x000fffffffffffffULL) != 0;
+                    unordered = lhs_nan || rhs_nan;
+                    if (!unordered) {
+                        double lhs, rhs;
+                        memcpy(&lhs, &lhs_raw, sizeof(lhs));
+                        memcpy(&rhs, &rhs_raw, sizeof(rhs));
+                        less = lhs < rhs;
+                        equal = lhs == rhs;
+                    }
+                } else {
+                    uint32_t lhs_raw = cpu->xmm[xmm].u32[0];
+                    uint32_t rhs_raw;
+                    if (rm.is_reg) {
+                        if (rm.reg >= 16) goto undefined;
+                        rhs_raw = cpu->xmm[rm.reg].u32[0];
+                    } else if (guest_read(cpu, rm.addr, &rhs_raw, sizeof(rhs_raw)) < 0) {
+                        goto gpf;
+                    }
+                    bool lhs_nan = (lhs_raw & 0x7f800000U) == 0x7f800000U &&
+                                   (lhs_raw & 0x007fffffU) != 0;
+                    bool rhs_nan = (rhs_raw & 0x7f800000U) == 0x7f800000U &&
+                                   (rhs_raw & 0x007fffffU) != 0;
+                    unordered = lhs_nan || rhs_nan;
+                    if (!unordered) {
+                        float lhs, rhs;
+                        memcpy(&lhs, &lhs_raw, sizeof(lhs));
+                        memcpy(&rhs, &rhs_raw, sizeof(rhs));
+                        less = lhs < rhs;
+                        equal = lhs == rhs;
+                    }
+                }
+
+                // Intel COMI/UCOMI result table:
+                // unordered: ZF=PF=CF=1; greater: all 0;
+                // less: CF=1; equal: ZF=1. OF/SF/AF are cleared.
+                cpu->vf = 0;
+                cpu->nf = 0;
+                if (unordered) {
+                    cpu->zf = 1;
+                    cpu->pf = 1;
+                    cpu->cf = 1;
+                } else {
+                    cpu->zf = equal;
+                    cpu->pf = 0;
+                    cpu->cf = less;
+                }
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
+            // 66 0F 74/75/76 /r: PCMPEQB/W/D xmm, xmm/m128.
             // 66 0F 64/65/66 /r: PCMPGTB/W/D xmm, xmm/m128.
             if (operand16 &&
                 (op2 == 0x74 || op2 == 0x75 || op2 == 0x76 ||
@@ -71,4 +149,4 @@ if anchor not in s:
     raise SystemExit("0F dispatch anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with packed SSE2 compares")
+print("patched x86_64 interpreter with packed and scalar SSE compares")

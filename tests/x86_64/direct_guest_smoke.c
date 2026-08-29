@@ -145,7 +145,6 @@ static void test_exact_xorps(void) {
 static void test_mov_r8_imm(void) {
     struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
 
-    // Exact BDS frontier: B0 01 = MOV AL, 1. Preserve the upper 56 bits.
     memset(memory, 0, sizeof(memory));
     const uint8_t al_program[] = {
         0xb0,0x01,
@@ -161,7 +160,6 @@ static void test_mov_r8_imm(void) {
     assert(cpu.x86_last_syscall == 60);
     assert(x86_64_get_reg(&cpu, X86_64_RDI) == 0x1122334455667701ULL);
 
-    // Legacy B4 means AH, not SPL.
     memset(memory, 0, sizeof(memory));
     const uint8_t ah_program[] = {
         0xb4,0xaa,
@@ -176,7 +174,6 @@ static void test_mov_r8_imm(void) {
     assert(interrupt == INT_SYSCALL);
     assert(x86_64_get_reg(&cpu, X86_64_RDI) == 0x112233445566aa88ULL);
 
-    // With REX, B4 means SPL. REX.B on B0 reaches r8b.
     memset(memory, 0, sizeof(memory));
     const uint8_t rex_program[] = {
         0x40,0xb4,0x55,
@@ -195,6 +192,60 @@ static void test_mov_r8_imm(void) {
     assert(x86_64_get_reg(&cpu, X86_64_R8) == 0x887766554433225aULL);
 
     puts("DIRECT X86_64 MOV R8 IMM: PASS");
+}
+
+static struct cpu_state run_ucomi(uint64_t lhs, uint64_t rhs, bool is_double) {
+    memset(memory, 0, sizeof(memory));
+    static const uint8_t single_program[] = {
+        0x0f,0x2e,0xc1,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    static const uint8_t double_program[] = {
+        0x66,0x0f,0x2e,0xc1,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    if (is_double)
+        memcpy(memory, double_program, sizeof(double_program));
+    else
+        memcpy(memory, single_program, sizeof(single_program));
+
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    if (is_double) {
+        cpu.xmm[0].u64[0] = lhs;
+        cpu.xmm[1].u64[0] = rhs;
+    } else {
+        cpu.xmm[0].u32[0] = (uint32_t)lhs;
+        cpu.xmm[1].u32[0] = (uint32_t)rhs;
+    }
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(cpu.x86_last_syscall == 60);
+    return cpu;
+}
+
+static void test_ucomi_flags(void) {
+    struct cpu_state cpu;
+
+    cpu = run_ucomi(0x3f800000U, 0x40000000U, false); // 1.0f < 2.0f
+    assert(cpu.cf == 1 && cpu.zf == 0 && cpu.pf == 0);
+    assert(cpu.nf == 0 && cpu.vf == 0);
+
+    cpu = run_ucomi(0x40000000U, 0x3f800000U, false); // 2.0f > 1.0f
+    assert(cpu.cf == 0 && cpu.zf == 0 && cpu.pf == 0);
+
+    cpu = run_ucomi(0x3f800000U, 0x3f800000U, false); // equal
+    assert(cpu.cf == 0 && cpu.zf == 1 && cpu.pf == 0);
+
+    cpu = run_ucomi(0x7fc00000U, 0x3f800000U, false); // unordered qNaN
+    assert(cpu.cf == 1 && cpu.zf == 1 && cpu.pf == 1);
+
+    cpu = run_ucomi(0x3ff0000000000000ULL, 0x4000000000000000ULL, true); // 1.0 < 2.0
+    assert(cpu.cf == 1 && cpu.zf == 0 && cpu.pf == 0);
+
+    puts("DIRECT X86_64 UCOMI: PASS");
 }
 
 static void test_write_exit(void) {
@@ -237,6 +288,7 @@ int main(void) {
     test_exact_imul_imm();
     test_exact_xorps();
     test_mov_r8_imm();
+    test_ucomi_flags();
     test_write_exit();
     return 0;
 }
