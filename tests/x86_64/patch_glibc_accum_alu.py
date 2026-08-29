@@ -3,7 +3,7 @@ from pathlib import Path
 
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
-anchor = '''        // TEST accumulator, immediate. A8 tests AL with imm8; A9 tests\n'''
+anchor = '''        // CALL rel32.\n'''
 insert = r'''        // Legacy accumulator-immediate ALU encodings. Modern glibc still
         // emits the compact AL/EAX/RAX forms because x86 carries its ancestry
         // around like geological strata.
@@ -59,7 +59,7 @@ insert = r'''        // Legacy accumulator-immediate ALU encodings. Modern glibc
 
 '''
 if anchor not in s:
-    raise SystemExit("accumulator TEST anchor missing")
+    raise SystemExit("CALL anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
 print("patched x86_64 interpreter with accumulator immediate ALU")
