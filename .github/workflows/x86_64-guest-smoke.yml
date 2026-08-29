@@ -38,7 +38,7 @@ jobs:
 
   linuxkit-host-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,11 +52,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev
       - name: Configure direct x86_64 guest LinuxKit
-        run: |
-          meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
+        run: meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
       - name: Build LinuxKit x86_64 guest host binary
-        run: |
-          ninja -C build-x86_64
+        run: ninja -C build-x86_64
       - name: Build static x86_64 guest ELF fixture
         run: |
           set -euo pipefail
@@ -68,7 +66,6 @@ jobs:
           readelf -h hello-x86_64 | tee hello-elf-header.txt
           grep -q 'Class:.*ELF64' hello-elf-header.txt
           grep -q 'Machine:.*Advanced Micro Devices X86-64' hello-elf-header.txt
-          objdump -d hello-x86_64 | sed -n '/<_start>:/,+16p'
       - name: Build minimal fakefs
         run: |
           set -euo pipefail
@@ -83,45 +80,43 @@ jobs:
           timeout 20 ./build-x86_64/ish -f x86-rootfs-fakefs /hello-x86_64 2>&1 | tee full-x86-elf.log
           grep -q '^HELLO X86_64 GUEST$' full-x86-elf.log
           echo 'FULL X86_64 ELF GUEST: PASS'
-      - name: Build dynamic glibc x86_64 fixture
+
+      - name: Diagnose runner glibc ISA property
+        run: |
+          echo '--- Ubuntu runner libc GNU properties ---'
+          readelf -n /lib/x86_64-linux-gnu/libc.so.6 | grep -A8 -B2 -E 'ISA|GNU_PROPERTY' || true
+          echo '--- Ubuntu runner loader GNU properties ---'
+          readelf -n /lib64/ld-linux-x86-64.so.2 | grep -A8 -B2 -E 'ISA|GNU_PROPERTY' || true
+
+      - name: Build Ubuntu 22.04 amd64 guest rootfs
         run: |
           set -euo pipefail
-          cat > hello-glibc.c <<'EOF'
-          #include <unistd.h>
-          int main(void) {
-              static const char msg[] = "HELLO GLIBC X86_64 GUEST\n";
-              return write(1, msg, sizeof(msg) - 1) == (ssize_t)(sizeof(msg) - 1) ? 0 : 1;
-          }
-          EOF
-          gcc -O0 -fno-pie -no-pie hello-glibc.c -o hello-glibc
-          file hello-glibc
-          readelf -l hello-glibc | tee hello-glibc-phdr.txt
-          grep -q '/lib64/ld-linux-x86-64.so.2' hello-glibc-phdr.txt
-      - name: Build glibc fakefs
-        run: |
-          set -euo pipefail
-          rm -rf glibc-rootfs glibc-rootfs-fakefs glibc-rootfs.tar
-          mkdir -p glibc-rootfs/dev glibc-rootfs/lib64 glibc-rootfs/lib/x86_64-linux-gnu
-          install -m 0755 hello-glibc glibc-rootfs/hello-glibc
-          cp -L /lib64/ld-linux-x86-64.so.2 glibc-rootfs/lib64/ld-linux-x86-64.so.2
-          cp -L /lib/x86_64-linux-gnu/libc.so.6 glibc-rootfs/lib/x86_64-linux-gnu/libc.so.6
-          tar --numeric-owner -C glibc-rootfs -cf glibc-rootfs.tar .
-          ./build-x86_64/tools/fakefsify glibc-rootfs.tar glibc-rootfs-fakefs
-      - name: Probe glibc loader through x86_64 guest
+          wget -q -O jammy-base.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
+          rm -rf jammy-root jammy-fakefs jammy-rootfs.tar
+          mkdir jammy-root
+          tar -xzf jammy-base.tar.gz -C jammy-root
+          echo '--- Jammy libc ---'
+          file jammy-root/lib/x86_64-linux-gnu/libc.so.6
+          readelf -n jammy-root/lib/x86_64-linux-gnu/libc.so.6 | grep -A8 -B2 -E 'ISA|GNU_PROPERTY' || true
+          echo '--- Jammy echo ---'
+          file jammy-root/bin/echo
+          readelf -l jammy-root/bin/echo | grep -E 'interpreter|Requesting' || true
+          tar --numeric-owner -C jammy-root -cf jammy-rootfs.tar .
+          ./build-x86_64/tools/fakefsify jammy-rootfs.tar jammy-fakefs
+
+      - name: Run Ubuntu 22.04 glibc through x86_64 guest
         run: |
           set -euo pipefail
           set +e
-          ISH_SYSTRACE=1 timeout 20 ./build-x86_64/ish -f glibc-rootfs-fakefs /hello-glibc >glibc-guest.log 2>&1
+          ISH_SYSTRACE=1 timeout 30 ./build-x86_64/ish -f jammy-fakefs /bin/echo 'HELLO JAMMY GLIBC' >jammy-guest.log 2>&1
           rc=$?
           set -e
-          cat glibc-guest.log
-          echo "GLIBC_GUEST_RC=$rc"
-          if grep -q '^HELLO GLIBC X86_64 GUEST$' glibc-guest.log; then
-            echo 'GLIBC X86_64 GUEST: PASS'
+          cat jammy-guest.log
+          echo "JAMMY_GUEST_RC=$rc"
+          if grep -q '^HELLO JAMMY GLIBC$' jammy-guest.log; then
+            echo 'JAMMY GLIBC X86_64 GUEST: PASS'
             exit 0
           fi
-          echo '--- ld-linux bytes/disassembly near current bring-up frontier (0x26000) ---'
-          xxd -g1 -s 0x25fc0 -l 0x120 /lib64/ld-linux-x86-64.so.2 || true
-          objdump -d --start-address=0x25fc0 --stop-address=0x260e0 /lib64/ld-linux-x86-64.so.2 || true
-          echo 'GLIBC X86_64 GUEST: EXPECTED BRING-UP FAILURE'
+          echo '--- first unsupported/failure context ---'
+          grep -E -m1 -B3 -A8 'illegal instruction|segmentation|CPU ISA|not found|not implemented|undefined' jammy-guest.log || true
           exit 1
