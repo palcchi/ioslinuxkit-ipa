@@ -121,26 +121,38 @@ jobs:
             exit 1
           fi
 
-      - name: Download and inspect official Bedrock Dedicated Server
+      - name: Download and prepare official Bedrock Dedicated Server
         run: |
           set -euo pipefail
           BDS_VERSION=1.26.44.3
           BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BDS_VERSION}.zip"
           rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip
           cp -a jammy-root bds-root
-          mkdir -p bds-root/opt/bds
+
+          # Ubuntu Base intentionally omits the C++ runtime. Install the Jammy
+          # runtime inside the x86_64 rootfs while CI itself can chroot natively.
+          cp /etc/resolv.conf bds-root/etc/resolv.conf
+          sudo chroot bds-root /bin/sh -c 'apt-get update >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libstdc++6 libgcc-s1 ca-certificates >/dev/null'
+          rm -rf bds-root/var/lib/apt/lists/*
+
           wget -O bds.zip "$BDS_URL"
-          unzip -q bds.zip -d bds-root/opt/bds
-          chmod +x bds-root/opt/bds/bedrock_server
+          # Keep the complete BDS distribution at guest /. This makes the
+          # guest's initial working directory and BDS relative resource paths
+          # agree, while allowing direct exec without a shell wrapper.
+          unzip -q bds.zip -d bds-root
+          chmod +x bds-root/bedrock_server
+
           echo '--- BDS binary ---'
-          file bds-root/opt/bds/bedrock_server
-          readelf -h bds-root/opt/bds/bedrock_server | grep -E 'Class:|Machine:|Type:'
+          file bds-root/bedrock_server
+          readelf -h bds-root/bedrock_server | grep -E 'Class:|Machine:|Type:'
           echo '--- BDS interpreter ---'
-          readelf -l bds-root/opt/bds/bedrock_server | grep -E 'interpreter|Requesting' || true
+          readelf -l bds-root/bedrock_server | grep -E 'interpreter|Requesting' || true
           echo '--- BDS NEEDED libraries ---'
-          readelf -d bds-root/opt/bds/bedrock_server | grep NEEDED || true
-          echo '--- Host ldd view ---'
-          ldd bds-root/opt/bds/bedrock_server || true
+          readelf -d bds-root/bedrock_server | grep NEEDED || true
+          echo '--- BDS bundled shared objects ---'
+          find bds-root -maxdepth 2 -type f -name '*.so*' -printf '%P\n' | sort || true
+          echo '--- Guest-root dependency resolution ---'
+          sudo chroot bds-root /usr/bin/ldd /bedrock_server || true
 
       - name: Build Bedrock Dedicated Server fakefs
         run: |
@@ -152,7 +164,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          timeout 75 ./build-x86_64/ish -f bds-fakefs /bin/sh -c 'cd /opt/bds && LD_LIBRARY_PATH=. ./bedrock_server' >bds-guest.log 2>&1
+          timeout 90 ./build-x86_64/ish -f bds-fakefs /bedrock_server >bds-guest.log 2>&1
           rc=$?
           set -e
           cat bds-guest.log
@@ -162,5 +174,5 @@ jobs:
             exit 0
           fi
           echo '--- Bedrock first failure/frontier ---'
-          grep -E -m1 -B5 -A12 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal' bds-guest.log || true
+          grep -E -m1 -B5 -A16 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal|x86-gpf|x86-undefined' bds-guest.log || true
           exit 1
