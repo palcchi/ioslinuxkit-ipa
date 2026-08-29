@@ -1,0 +1,66 @@
+name: V-MINE Native iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - x86_64-guest
+    paths:
+      - 'app/**'
+      - 'iSH.xcodeproj/**'
+      - '.github/workflows/v-mine-ios.yml'
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout V-MINE
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app
+          xcodebuild -version
+
+      - name: Install build tools
+        run: brew install meson ninja
+
+      - name: Build native V-MINE shell
+        run: |
+          set -o pipefail
+          rm -rf build-vmine
+          xcodebuild \
+            -project iSH.xcodeproj \
+            -scheme iSH-ARM64 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-vmine \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee xcode-build.log
+
+      - name: Show build errors
+        if: failure()
+        run: grep -E 'error:|fatal error:|BUILD FAILED' xcode-build.log | tail -120 || true
+
+      - name: Package unsigned V-MINE IPA
+        run: |
+          set -euo pipefail
+          APP=$(find build-vmine/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          test -n "$APP"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist"
+          rm -rf Payload V-MINE-preview.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          /usr/bin/zip -qry V-MINE-preview.ipa Payload
+          ls -lh V-MINE-preview.ipa
+
+      - name: Upload V-MINE IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: V-MINE-Native-iOS-Preview
+          path: V-MINE-preview.ipa
