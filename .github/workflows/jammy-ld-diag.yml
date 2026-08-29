@@ -1,0 +1,29 @@
+name: Jammy Loader Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [x86_64-guest]
+    paths:
+      - '.github/workflows/jammy-ld-diag.yml'
+
+jobs:
+  disasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Ubuntu 22.04 amd64 base
+        run: |
+          wget -q -O jammy.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
+          mkdir root
+          tar -xzf jammy.tar.gz -C root
+      - name: Disassemble loader crash region
+        run: |
+          LD=root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+          echo '=== program headers ==='
+          readelf -l "$LD" | sed -n '1,80p'
+          echo '=== symbols near crash ==='
+          nm -D -n "$LD" | tail -n +1 | grep -B5 -A5 -E '0000000000010|0000000000011' || true
+          echo '=== 0x10e80..0x11080 ==='
+          objdump -d -Mintel --start-address=0x10e80 --stop-address=0x11080 "$LD"
