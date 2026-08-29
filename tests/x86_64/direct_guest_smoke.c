@@ -67,6 +67,12 @@ static void test_exact_movups_sib(void) {
     x86_64_set_reg(&cpu, X86_64_RDX, 0xf8);
 
     int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    fprintf(stderr,
+            "[vmine-movups-result] interrupt=%d pc=%llx syscall=%llu xmm4=%02x%02x%02x%02x\n",
+            interrupt,
+            (unsigned long long)cpu.pc,
+            (unsigned long long)cpu.x86_last_syscall,
+            cpu.xmm[4].u8[0], cpu.xmm[4].u8[1], cpu.xmm[4].u8[2], cpu.xmm[4].u8[3]);
     assert(interrupt == INT_SYSCALL);
     assert(cpu.x86_last_syscall == 60);
     for (unsigned i = 0; i < 16; i++)
@@ -78,16 +84,6 @@ static void test_exact_movups_sib(void) {
 static void test_write_exit(void) {
     memset(memory, 0, sizeof(memory));
 
-    // Linux x86_64 machine code:
-    //   mov $1,%rax              ; write
-    //   mov $1,%rdi              ; stdout
-    //   lea msg(%rip),%rsi
-    //   mov $20,%rdx
-    //   syscall
-    //   mov $60,%rax             ; exit
-    //   xor %rdi,%rdi
-    //   syscall
-    // msg: "DIRECT X86_64 GUEST\n"
     const uint8_t program[] = {
         0x48,0xc7,0xc0,0x01,0x00,0x00,0x00,
         0x48,0xc7,0xc7,0x01,0x00,0x00,0x00,
@@ -110,20 +106,19 @@ static void test_write_exit(void) {
 
     int interrupt = cpu_run_to_interrupt(&cpu, NULL);
     assert(interrupt == INT_SYSCALL);
-    assert(cpu.x86_last_syscall == 1);   // x86_64 write
-    assert(cpu.regs[8] == 64);           // compatibility AArch64 write
-    assert(cpu.regs[0] == 1);            // fd
-    assert(cpu.regs[1] == BASE + 42);    // message address
-    assert(cpu.regs[2] == 20);           // message length
+    assert(cpu.x86_last_syscall == 1);
+    assert(cpu.regs[8] == 64);
+    assert(cpu.regs[0] == 1);
+    assert(cpu.regs[1] == BASE + 42);
+    assert(cpu.regs[2] == 20);
 
-    // Simulate the shared kernel returning write() = 20 in compatibility x0.
     cpu.regs[0] = 20;
 
     interrupt = cpu_run_to_interrupt(&cpu, NULL);
     assert(interrupt == INT_SYSCALL);
-    assert(cpu.x86_last_syscall == 60);  // x86_64 exit
-    assert(cpu.regs[8] == 93);           // compatibility AArch64 exit
-    assert(cpu.regs[0] == 0);            // status
+    assert(cpu.x86_last_syscall == 60);
+    assert(cpu.regs[8] == 93);
+    assert(cpu.regs[0] == 0);
 
     puts("DIRECT X86_64 GUEST INTERPRETER: PASS");
 }
