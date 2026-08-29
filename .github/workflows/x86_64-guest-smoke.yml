@@ -120,5 +120,8 @@ jobs:
             echo 'GLIBC X86_64 GUEST: PASS'
             exit 0
           fi
+          echo '--- ld-linux bytes/disassembly near current bring-up frontier (0x26000) ---'
+          xxd -g1 -s 0x25fc0 -l 0x120 /lib64/ld-linux-x86-64.so.2 || true
+          objdump -d --start-address=0x25fc0 --stop-address=0x260e0 /lib64/ld-linux-x86-64.so.2 || true
           echo 'GLIBC X86_64 GUEST: EXPECTED BRING-UP FAILURE'
           exit 1
