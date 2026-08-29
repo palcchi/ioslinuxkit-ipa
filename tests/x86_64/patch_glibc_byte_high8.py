@@ -98,8 +98,10 @@ new = '''    unsigned mod = modrm >> 6;
                 break;
         }
         if (modrm_addr > 1 && fetch_u8(cpu, modrm_addr - 2, &prev2_op) == 0 && prev2_op == 0x0f) {
-            // SETcc r/m8 and MOVZX/MOVSX from r/m8.
-            if ((prev_op >= 0x90 && prev_op <= 0x9f) || prev_op == 0xb6 || prev_op == 0xbe)
+            // SETcc, CMPXCHG8, XADD8 and MOVZX/MOVSX from r/m8.
+            if ((prev_op >= 0x90 && prev_op <= 0x9f) ||
+                prev_op == 0xb0 || prev_op == 0xc0 ||
+                prev_op == 0xb6 || prev_op == 0xbe)
                 byte_encoding = true;
         }
     }
