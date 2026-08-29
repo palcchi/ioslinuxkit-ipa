@@ -28,7 +28,56 @@ static struct mmu_ops ops = {
     .translate_write_nofault = test_translate_write_nofault,
 };
 
-int main(void) {
+static struct cpu_state fresh_cpu(struct mmu *mmu) {
+    struct cpu_state cpu = {0};
+    cpu.mmu = mmu;
+    cpu.pc = BASE;
+    cpu.sp = BASE + sizeof(memory) - 16;
+    return cpu;
+}
+
+static void test_exact_movups_sib(void) {
+    memset(memory, 0, sizeof(memory));
+
+    // Exact instruction shape observed in Jammy /bin/ls:
+    //   0f 10 64 16 08    movups 0x8(%rsi,%rdx,1), %xmm4
+    // Follow it with exit(0), so cpu_run_to_interrupt gives us a clean
+    // boundary after the SSE instruction executes.
+    const uint8_t program[] = {
+        0x0f,0x10,0x64,0x16,0x08,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x48,0x31,0xff,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+
+    const addr_t src = BASE + 0x300;
+    for (unsigned i = 0; i < 16; i++)
+        memory[(src - BASE) + i] = (uint8_t)(0xa0 + i);
+
+    struct mmu mmu = {
+        .ops = &ops,
+        .asbestos = NULL,
+        .changes = 0,
+    };
+    struct cpu_state cpu = fresh_cpu(&mmu);
+
+    // BASE+0x200 + 0xf8 + 8 = BASE+0x300.
+    x86_64_set_reg(&cpu, X86_64_RSI, BASE + 0x200);
+    x86_64_set_reg(&cpu, X86_64_RDX, 0xf8);
+
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(cpu.x86_last_syscall == 60);
+    for (unsigned i = 0; i < 16; i++)
+        assert(cpu.xmm[4].u8[i] == (uint8_t)(0xa0 + i));
+
+    puts("DIRECT X86_64 MOVUPS SIB: PASS");
+}
+
+static void test_write_exit(void) {
+    memset(memory, 0, sizeof(memory));
+
     // Linux x86_64 machine code:
     //   mov $1,%rax              ; write
     //   mov $1,%rdi              ; stdout
@@ -57,10 +106,7 @@ int main(void) {
         .asbestos = NULL,
         .changes = 0,
     };
-    struct cpu_state cpu = {0};
-    cpu.mmu = &mmu;
-    cpu.pc = BASE;
-    cpu.sp = BASE + sizeof(memory) - 16;
+    struct cpu_state cpu = fresh_cpu(&mmu);
 
     int interrupt = cpu_run_to_interrupt(&cpu, NULL);
     assert(interrupt == INT_SYSCALL);
@@ -80,5 +126,10 @@ int main(void) {
     assert(cpu.regs[0] == 0);            // status
 
     puts("DIRECT X86_64 GUEST INTERPRETER: PASS");
+}
+
+int main(void) {
+    test_exact_movups_sib();
+    test_write_exit();
     return 0;
 }
