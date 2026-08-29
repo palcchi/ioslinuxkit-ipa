@@ -13,11 +13,19 @@ insert = r'''            // Scalar SSE/SSE2 arithmetic. F3 selects float, F2 sel
                 struct rm_operand rm;
                 unsigned xmm;
                 addr_t next;
-                unsigned lane_bits = rep_prefix == 0xf3 ? 32 : 64;
                 uint64_t src_raw;
                 if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
                 if (xmm >= 16) goto undefined;
-                if (rm_read(cpu, &rm, lane_bits, &src_raw) < 0) goto gpf;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src_raw = rep_prefix == 0xf3 ? cpu->xmm[rm.reg].u32[0] : cpu->xmm[rm.reg].u64[0];
+                } else if (rep_prefix == 0xf3) {
+                    uint32_t src32;
+                    if (guest_read(cpu, rm.addr, &src32, sizeof(src32)) < 0) goto gpf;
+                    src_raw = src32;
+                } else {
+                    if (guest_read(cpu, rm.addr, &src_raw, sizeof(src_raw)) < 0) goto gpf;
+                }
 
                 if (rep_prefix == 0xf3) {
                     uint32_t dst_raw = cpu->xmm[xmm].u32[0];
