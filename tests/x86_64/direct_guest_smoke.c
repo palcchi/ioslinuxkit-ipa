@@ -124,6 +124,29 @@ static void test_exact_imul_imm(void) {
     puts("DIRECT X86_64 IMUL IMM: PASS");
 }
 
+static void test_exact_xorps(void) {
+    memset(memory, 0, sizeof(memory));
+
+    // Exact BDS frontier: 0F 57 C0 = XORPS xmm0, xmm0.
+    const uint8_t program[] = {
+        0x0f,0x57,0xc0,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x48,0x31,0xff,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    cpu.xmm[0].u128 = ~((__uint128_t)0);
+
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    assert(cpu.x86_last_syscall == 60);
+    assert(cpu.xmm[0].u128 == 0);
+    puts("DIRECT X86_64 XORPS: PASS");
+}
+
 static void test_write_exit(void) {
     memset(memory, 0, sizeof(memory));
     const uint8_t program[] = {
@@ -162,6 +185,7 @@ int main(void) {
     test_exact_movups_sib();
     test_exact_pminub();
     test_exact_imul_imm();
+    test_exact_xorps();
     test_write_exit();
     return 0;
 }
