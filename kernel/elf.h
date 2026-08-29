@@ -12,11 +12,18 @@
 #define ELF_DYNAMIC 3
 
 // Machine types
-#define ELF_AARCH64 183     // EM_AARCH64
+#define ELF_X86_64 62
+#define ELF_AARCH64 183
+#if defined(GUEST_X86_64)
+#define ELF_MACHINE ELF_X86_64
+#elif defined(GUEST_ARM64)
 #define ELF_MACHINE ELF_AARCH64
-#define ELF_CLASS   ELF_64BIT
+#else
+#error "No guest ELF machine selected"
+#endif
+#define ELF_CLASS ELF_64BIT
 
-// 64-bit ELF header (for ARM64)
+// 64-bit ELF header. Field layout is shared by x86_64 and AArch64.
 struct elf_header64 {
     uint32_t magic;
     byte_t bitness;
@@ -52,11 +59,10 @@ typedef struct elf_header64 elf_header;
 #define PT_TLS 7
 #define PT_NUM 8
 
-// 64-bit program header (for ARM64)
-// Note: field order is different from 32-bit!
+// ELF64 program header. Field order is common to x86_64/AArch64 ELF64.
 struct prg_header64 {
     uint32_t type;
-    uint32_t flags;      // flags moved here in 64-bit
+    uint32_t flags;
     uint64_t offset;
     uint64_t vaddr;
     uint64_t paddr;
@@ -96,7 +102,6 @@ struct aux_ent {
 #define AX_SYSINFO 32
 #define AX_SYSINFO_EHDR 33
 
-// 64-bit dynamic entry (for ARM64)
 struct dyn_ent64 {
     uint64_t tag;
     uint64_t val;
@@ -117,47 +122,42 @@ struct dyn_ent64 {
 #define DT_JMPREL 23
 #define DT_PLTREL 20
 
-// 64-bit ELF symbol (for ARM64)
 struct elf_sym64 {
-    uint32_t name;      // Offset in string table
-    byte_t info;        // Type and binding
-    byte_t other;       // Visibility
-    uint16_t shndx;     // Section index
-    uint64_t value;     // Symbol value
-    uint64_t size;      // Symbol size
+    uint32_t name;
+    byte_t info;
+    byte_t other;
+    uint16_t shndx;
+    uint64_t value;
+    uint64_t size;
 };
 
-// ARM64 relocation entry (Rela format with addend)
 struct elf_rela64 {
-    uint64_t offset;    // Location to apply relocation
-    uint64_t info;      // Relocation type and symbol index
-    int64_t addend;     // Addend value
+    uint64_t offset;
+    uint64_t info;
+    int64_t addend;
 };
 
-// ARM64 relocation types
+// AArch64 relocation values retained for the existing native-offload path.
 #define R_AARCH64_NONE          0
 #define R_AARCH64_ABS64         257
 #define R_AARCH64_GLOB_DAT      1025
 #define R_AARCH64_JUMP_SLOT     1026
 #define R_AARCH64_RELATIVE      1027
 
-// Macros for extracting relocation info (ARM64)
+// Common ELF64 relocation extraction.
 #define ELF64_R_SYM(i)   ((uint32_t)((i) >> 32))
 #define ELF64_R_TYPE(i)  ((uint32_t)((i) & 0xffffffff))
 
-// Symbol binding values
 #define STB_LOCAL  0
 #define STB_GLOBAL 1
 #define STB_WEAK   2
 
-// Symbol type values
 #define STT_NOTYPE  0
 #define STT_OBJECT  1
 #define STT_FUNC    2
 #define STT_SECTION 3
 #define STT_FILE    4
 
-// Macros for symbol info
 #define ELF_ST_BIND(i)   ((i) >> 4)
 #define ELF_ST_TYPE(i)   ((i) & 0xf)
 
