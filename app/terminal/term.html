@@ -1,8 +1,11 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="height=device-height, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
 <link rel="stylesheet" href="term.css">
+
 <div id="terminal"></div>
+
 <script>
 (() => {
     const log = (message) => {
@@ -11,18 +14,18 @@
         } catch (error) {
         }
     };
-    window.__terminalBootstrapLog = log;
-    window.addEventListener('error', (event) => {
+
+    window._terminalBootstrapLog = log;
+
+    window.addEventListener("error", (event) => {
         log(`terminal bootstrap error: ${event.message} @ ${event.filename}:${event.lineno}:${event.colno}`);
     });
-    window.addEventListener('unhandledrejection', (event) => {
+
+    window.addEventListener("unhandledrejection", (event) => {
         log(`terminal bootstrap rejection: ${event.reason?.stack || event.reason}`);
     });
 })();
 </script>
-<script
-    src="ghostty-web.js"
-    onerror="window.__terminalBootstrapLog && window.__terminalBootstrapLog('terminal ghostty script failed to load')"></script>
-<script
-    src="term.js"
-    onerror="window.__terminalBootstrapLog && window.__terminalBootstrapLog('terminal bridge script failed to load')"></script>
+
+<script src="ghostty-web.js"></script>
+<script src="term.js"></script>
