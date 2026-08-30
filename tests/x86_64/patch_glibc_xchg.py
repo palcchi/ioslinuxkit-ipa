@@ -22,6 +22,24 @@ insert = r'''        // 90+rd: XCHG rAX, r. Bare 90 is the architectural NOP; th
             continue;
         }
 
+        // 86 /r: XCHG r/m8, r8. decode_rm carries the legacy AH/CH/DH/BH
+        // marker when no REX is present, while any REX correctly selects
+        // SPL/BPL/SIL/DIL and R8B..R15B.
+        if (op == 0x86) {
+            struct rm_operand rm;
+            unsigned reg;
+            addr_t next;
+            uint64_t rm_value, reg_value;
+            if (decode_rm(cpu, rex, fs_prefix, ip + 1, 0, &rm, &reg, &next) < 0) goto gpf;
+            if (rm_read(cpu, &rm, 8, &rm_value) < 0) goto gpf;
+            reg_value = read_reg_bits(cpu, reg, 8);
+            if (rm_write(cpu, &rm, 8, reg_value) < 0) goto gpf;
+            write_reg_bits(cpu, reg, rm_value, 8);
+            cpu->pc = next;
+            cpu->cycle++;
+            continue;
+        }
+
         // 87 /r: XCHG r/m16/32/64, r. The memory form is architecturally
         // atomic, but the guest interpreter is single-step serialized here;
         // ordinary load/store exchange is enough for current loader bring-up.
@@ -45,4 +63,4 @@ if anchor not in s:
     raise SystemExit("MOV immediate anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with XCHG forms")
+print("patched x86_64 interpreter with XCHG byte and scalar forms")
