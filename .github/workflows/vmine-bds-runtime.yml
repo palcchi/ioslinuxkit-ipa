@@ -65,8 +65,6 @@ jobs:
           unzip -q bds.zip -d bds-root
           chmod +x bds-root/bedrock_server
 
-          # Materialize the dynamic loader instead of relying on /lib64's
-          # symlink surviving fakefs conversion.
           loader_src='bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
           if [ ! -f "$loader_src" ]; then
             loader_src='bds-root/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
