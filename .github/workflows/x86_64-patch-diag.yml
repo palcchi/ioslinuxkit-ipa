@@ -1,0 +1,26 @@
+name: x86_64 Patch Chain Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - x86_64-guest
+    paths:
+      - 'tests/x86_64/**'
+      - 'emu/**'
+      - '.github/workflows/x86_64-patch-diag.yml'
+
+jobs:
+  patch-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patch chain with filenames
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do
+            echo "=== APPLYING: $p ==="
+            python3 "$p"
+          done
+          echo "PATCH CHAIN: PASS"
