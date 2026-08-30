@@ -4,17 +4,28 @@ from pathlib import Path
 interp = Path("emu/arch/x86_64/interp.c")
 s = interp.read_text()
 
+# Prefix identity may already have been upgraded by patch_glibc_prefix_kind.py.
+# Keep this patch composable regardless of which bring-up patch performed the
+# bool -> byte conversion first.
 old_prefix = '''        bool rep_prefix = false;\n'''
 new_prefix = '''        uint8_t rep_prefix = 0;\n'''
-if old_prefix not in s:
+if old_prefix in s:
+    s = s.replace(old_prefix, new_prefix, 1)
+elif new_prefix not in s:
     raise SystemExit("rep_prefix declaration anchor missing")
-s = s.replace(old_prefix, new_prefix, 1)
 
 old_parse = '''            if (op == 0xf3) { rep_prefix = true; ip++; continue; }\n            if (op == 0xf2) { rep_prefix = true; ip++; continue; }\n'''
 new_parse = '''            if (op == 0xf3) { rep_prefix = 0xf3; ip++; continue; }\n            if (op == 0xf2) { rep_prefix = 0xf2; ip++; continue; }\n'''
-if old_parse not in s:
-    raise SystemExit("rep prefix parser anchor missing")
-s = s.replace(old_parse, new_parse, 1)
+if old_parse in s:
+    s = s.replace(old_parse, new_parse, 1)
+else:
+    accepted = (
+        new_parse in s or
+        ("if (op == 0xf3) { rep_prefix = op; ip++; continue; }" in s and
+         "if (op == 0xf2) { rep_prefix = op; ip++; continue; }" in s)
+    )
+    if not accepted:
+        raise SystemExit("rep prefix parser anchor missing")
 
 anchor = '''            // SYSCALL.\n'''
 insert = r'''            // F3 0F 2A /r: CVTSI2SS xmm, r/m32.
