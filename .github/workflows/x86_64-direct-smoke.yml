@@ -1,0 +1,210 @@
+name: x86_64 Direct Guest Smoke
+
+on:
+  push:
+    branches:
+      - x86_64-guest
+  workflow_dispatch:
+
+jobs:
+  direct-interpreter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Apply glibc bring-up patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do
+            echo "==> applying $p"
+            python3 "$p"
+          done
+
+      - name: Build direct x86_64 interpreter smoke
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra \
+            tests/x86_64/direct_interp_smoke.c \
+            emu/arch/x86_64/interp.c \
+            -I. -o direct-x86_64-smoke
+
+      - name: Run direct x86_64 interpreter smoke
+        run: ./direct-x86_64-smoke
+
+  linuxkit-host-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Apply glibc bring-up patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do
+            echo "==> applying $p"
+            python3 "$p"
+          done
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev unzip
+
+      - name: Configure direct x86_64 guest LinuxKit
+        run: meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
+
+      - name: Build LinuxKit x86_64 guest host binary
+        run: ninja -C build-x86_64
+
+      - name: Build static x86_64 guest ELF fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang -target x86_64-linux-gnu -fuse-ld=lld \
+            -nostdlib -static -no-pie \
+            -Wl,--build-id=none -Wl,-e,_start -Wl,-Ttext=0x400000 \
+            tests/x86_64/hello_guest.S -o hello-x86_64
+          file hello-x86_64
+          readelf -h hello-x86_64 | tee hello-elf-header.txt
+          grep -q 'Class:.*ELF64' hello-elf-header.txt
+          grep -q 'Machine:.*Advanced Micro Devices X86-64' hello-elf-header.txt
+
+      - name: Build minimal fakefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf x86-rootfs x86-rootfs-fakefs x86-rootfs.tar
+          mkdir -p x86-rootfs/dev
+          install -m 0755 hello-x86_64 x86-rootfs/hello-x86_64
+          tar --numeric-owner -C x86-rootfs -cf x86-rootfs.tar .
+          ./build-x86_64/tools/fakefsify x86-rootfs.tar x86-rootfs-fakefs
+
+      - name: Run static ELF through full LinuxKit x86_64 guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 20 ./build-x86_64/ish -f x86-rootfs-fakefs /hello-x86_64 2>&1 | tee full-x86-elf.log
+          grep -q '^HELLO X86_64 GUEST$' full-x86-elf.log
+          echo 'FULL X86_64 ELF GUEST: PASS'
+
+      - name: Diagnose runner glibc ISA property
+        run: |
+          echo '--- Ubuntu runner libc GNU properties ---'
+          readelf -n /lib/x86_64-linux-gnu/libc.so.6 | grep -A8 -B2 -E 'ISA|GNU_PROPERTY' || true
+          echo '--- Ubuntu runner loader GNU properties ---'
+          readelf -n /lib64/ld-linux-x86-64.so.2 | grep -A8 -B2 -E 'ISA|GNU_PROPERTY' || true
+
+      - name: Build Ubuntu 22.04 amd64 guest rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -q -O jammy-base.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
+          rm -rf jammy-root jammy-fakefs jammy-rootfs.tar
+          mkdir jammy-root
+          tar -xzf jammy-base.tar.gz -C jammy-root
+          echo '--- Jammy libc ---'
+          file jammy-root/lib/x86_64-linux-gnu/libc.so.6
+          readelf -n jammy-root/lib/x86_64-linux-gnu/libc.so.6 | grep -A8 -B2 -E 'ISA|GNU_PROPERTY' || true
+          echo '--- Jammy echo ---'
+          file jammy-root/bin/echo
+          readelf -l jammy-root/bin/echo | grep -E 'interpreter|Requesting' || true
+          tar --numeric-owner -C jammy-root -cf jammy-rootfs.tar .
+          ./build-x86_64/tools/fakefsify jammy-rootfs.tar jammy-fakefs
+
+      - name: Run Ubuntu 22.04 glibc through x86_64 guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          ISH_SYSTRACE=1 timeout 30 ./build-x86_64/ish -f jammy-fakefs /bin/echo 'HELLO JAMMY GLIBC' >jammy-guest.log 2>&1
+          rc=$?
+          set -e
+          cat jammy-guest.log
+          echo "JAMMY_GUEST_RC=$rc"
+          if grep -q '^HELLO JAMMY GLIBC$' jammy-guest.log; then
+            echo 'JAMMY GLIBC X86_64 GUEST: PASS'
+          else
+            echo '--- first unsupported/failure context ---'
+            grep -E -m1 -B3 -A8 'illegal instruction|segmentation|CPU ISA|not found|not implemented|undefined' jammy-guest.log || true
+            exit 1
+          fi
+
+      - name: Download and prepare official Bedrock Dedicated Server
+        shell: bash
+        run: |
+          set -euo pipefail
+          BDS_VERSION=1.26.44.3
+          BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BDS_VERSION}.zip"
+          rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip bds-debs
+          cp -a jammy-root bds-root
+
+          # Ubuntu Base omits libstdc++/libgcc. Download the matching Jammy
+          # amd64 packages on the CI host and extract their payload directly.
+          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/bds-jammy.list >/dev/null
+          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe
+          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe
+          deb [arch=amd64] http://security.ubuntu.com/ubuntu jammy-security main universe
+          EOF
+          sudo apt-get update >/dev/null
+          mkdir bds-debs
+          (
+            cd bds-debs
+            apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
+            apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
+          )
+          for deb in bds-debs/*.deb; do
+            dpkg-deb -x "$deb" bds-root
+          done
+
+          wget -q -O bds.zip "$BDS_URL"
+          unzip -q bds.zip -d bds-root
+          chmod +x bds-root/bedrock_server
+
+          # fakefs does not reliably preserve the Ubuntu Base /lib64 loader
+          # symlink. Materialize the ELF interpreter at the exact PT_INTERP
+          # path BDS requests so normal exec can open it inside the guest.
+          loader_src='bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
+          if [ ! -f "$loader_src" ]; then
+            loader_src='bds-root/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
+          fi
+          test -f "$loader_src"
+          mkdir -p bds-root/lib64
+          rm -f bds-root/lib64/ld-linux-x86-64.so.2
+          cp -L "$loader_src" bds-root/lib64/ld-linux-x86-64.so.2
+          chmod 0755 bds-root/lib64/ld-linux-x86-64.so.2
+
+          echo '--- BDS binary ---'
+          file bds-root/bedrock_server
+          readelf -l bds-root/bedrock_server | grep -E 'interpreter|Requesting' || true
+          echo '--- materialized BDS loader ---'
+          file bds-root/lib64/ld-linux-x86-64.so.2
+          test -x bds-root/lib64/ld-linux-x86-64.so.2
+
+      - name: Build Bedrock Dedicated Server fakefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --numeric-owner -C bds-root -cf bds-rootfs.tar .
+          ./build-x86_64/tools/fakefsify bds-rootfs.tar bds-fakefs
+
+      - name: Run official Bedrock Dedicated Server through x86_64 guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          timeout 90 ./build-x86_64/ish -f bds-fakefs /bedrock_server >bds-guest.log 2>&1
+          rc=$?
+          set -e
+          cat bds-guest.log
+          echo "BDS_GUEST_RC=$rc"
+          if grep -Eqi 'server started|IPv4 supported|19132|Dedicated Server' bds-guest.log; then
+            echo 'OFFICIAL BEDROCK SERVER X86_64 GUEST: STARTUP REACHED'
+            exit 0
+          fi
+          echo '--- Bedrock first failure/frontier ---'
+          grep -E -m1 -B5 -A16 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal|x86-gpf|x86-undefined' bds-guest.log || true
+          exit 1
