@@ -5,10 +5,10 @@ path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
 anchor = '''            // SYSCALL.\n'''
 insert = r'''            // 0F 54/55/56/57 /r: ANDPS/ANDNPS/ORPS/XORPS.
-            // These are the prefix-less SSE bitwise logical forms. Do not
-            // accept F2/F3-prefixed encodings here; 66-prefixed packed integer
-            // variants are handled separately below.
-            if (!operand16 && !rep_prefix &&
+            // 66 0F 54/55/56/57 /r: ANDPD/ANDNPD/ORPD/XORPD.
+            // Both families are architecturally identical 128-bit bitwise
+            // transforms; the PS/PD type label does not affect the bits.
+            if (!rep_prefix &&
                 (op2 == 0x54 || op2 == 0x55 || op2 == 0x56 || op2 == 0x57)) {
                 struct rm_operand rm;
                 unsigned xmm;
