@@ -129,10 +129,11 @@ jobs:
           rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip bds-debs
           cp -a jammy-root bds-root
 
-          # Ubuntu Base omits libstdc++/libgcc. Download the matching Jammy
-          # amd64 packages on the CI host and extract their payload directly.
-          # This avoids needing apt, gpgv and functional device nodes inside the
-          # deliberately tiny guest rootfs.
+          # Re-extract libc6 as well as libstdc++/libgcc. Ubuntu Base can leave
+          # the PT_INTERP loader path represented in a way fakefs does not
+          # preserve reliably after the BDS rootfs is assembled. Extracting the
+          # matching Jammy libc6 payload restores /lib64/ld-linux-x86-64.so.2
+          # and the canonical loader target before fakefs conversion.
           cat <<'EOF' | sudo tee /etc/apt/sources.list.d/bds-jammy.list >/dev/null
           deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe
           deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe
@@ -142,6 +143,7 @@ jobs:
           mkdir bds-debs
           (
             cd bds-debs
+            apt-get download libc6:amd64/jammy-updates || apt-get download libc6:amd64/jammy
             apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
             apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
           )
@@ -150,9 +152,6 @@ jobs:
           done
 
           wget -O bds.zip "$BDS_URL"
-          # Keep the complete BDS distribution at guest /. This makes the
-          # guest's initial working directory and BDS relative resource paths
-          # agree, while allowing direct exec without a shell wrapper.
           unzip -q bds.zip -d bds-root
           chmod +x bds-root/bedrock_server
 
@@ -163,10 +162,11 @@ jobs:
           readelf -l bds-root/bedrock_server | grep -E 'interpreter|Requesting' || true
           echo '--- BDS NEEDED libraries ---'
           readelf -d bds-root/bedrock_server | grep NEEDED || true
-          echo '--- BDS bundled shared objects ---'
-          find bds-root -maxdepth 2 -type f -name '*.so*' -printf '%P\n' | sort || true
-          echo '--- Guest-root dependency resolution ---'
-          sudo chroot bds-root /usr/bin/ldd /bedrock_server || true
+          echo '--- BDS loader candidates ---'
+          find bds-root -type f \( -name 'ld-linux-x86-64.so.2' -o -name 'ld-2.35.so' \) -print || true
+          ls -l bds-root/lib64/ld-linux-x86-64.so.2 || true
+          ls -l bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 || true
+          test -e bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
 
       - name: Build Bedrock Dedicated Server fakefs
         run: |
@@ -178,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          timeout 90 ./build-x86_64/ish -f bds-fakefs /bedrock_server >bds-guest.log 2>&1
+          timeout 90 ./build-x86_64/ish -f bds-fakefs -d / /bedrock_server >bds-guest.log 2>&1
           rc=$?
           set -e
           cat bds-guest.log
