@@ -29,6 +29,11 @@ new = """    cpu->regs[3] = x86_64_get_reg(cpu, X86_64_R10);
                 (unsigned long long)cpu->regs[2],
                 (unsigned long long)cpu->regs[3],
                 (unsigned long long)cpu->regs[4]);
+    } else if (guest_nr == 435) {
+        fprintf(stderr,
+                "[vmine-clone3-enter] args=%llx size=%llu\\n",
+                (unsigned long long)cpu->regs[0],
+                (unsigned long long)cpu->regs[1]);
     }
     cpu->x86_syscall_pending = true;
 """
@@ -41,8 +46,9 @@ resume_old = """    if (cpu->x86_syscall_pending) {
     }
 """
 resume_new = """    if (cpu->x86_syscall_pending) {
-        if (cpu->x86_last_syscall == 56)
-            fprintf(stderr, "[vmine-clone-return] result=%lld fs=%llx\\n",
+        if (cpu->x86_last_syscall == 56 || cpu->x86_last_syscall == 435)
+            fprintf(stderr, "[vmine-clone-return] nr=%llu result=%lld fs=%llx\\n",
+                    (unsigned long long)cpu->x86_last_syscall,
                     (long long)cpu->regs[0],
                     (unsigned long long)cpu->tls_ptr);
         x86_64_set_rax(cpu, cpu->regs[0]);
