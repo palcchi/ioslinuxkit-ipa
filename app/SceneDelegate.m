@@ -592,7 +592,7 @@ static NSString *const TerminalUUID = @"TerminalUUID";
 }
 
 - (NSUserActivity *)stateRestorationActivityForScene:(UIScene *)scene {
-    NSUserActivity *activity = [[NSUserActivity alloc] initWithActivityType:@"app.ish.scene"];
+    NSUserActivity *activity = [[NSUserActivity alloc] initWithActivityType:@"app.vmine.scene"];
     if (self.engineTerminalViewController.sessionTerminalUUID != nil) {
         self.terminalUUID = self.engineTerminalViewController.sessionTerminalUUID.UUIDString;
         if (self.terminalUUID != nil) [activity addUserInfoEntriesFromDictionary:@{TerminalUUID: self.terminalUUID}];

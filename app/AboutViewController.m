@@ -1,6 +1,6 @@
 //
 //  AboutViewController.m
-//  iSH
+//  V-MINE
 //
 //  Created by Theodore Dubois on 9/23/18.
 //
@@ -50,7 +50,7 @@
                                                                                  action:@selector(exitRecovery:)];
         self.navigationItem.leftBarButtonItem = nil;
     }
-    _versionLabel.text = [NSString stringWithFormat:@"ios-linuxkit %@ (Build %@)",
+    _versionLabel.text = [NSString stringWithFormat:@"V-MINE %@ (Build %@)",
                           [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
                           [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"]];
 
@@ -98,7 +98,7 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
     if (cell == self.sendFeedback) {
-        [UIApplication openURL:@"https://github.com/rcarmo/ios-linuxkit/issues"];
+        [UIApplication openURL:@"https://github.com/palcchi/ioslinuxkit-ipa/issues"];
     } else if (cell == self.mountsCell) {
         [self.navigationController pushViewController:[MountsViewController new] animated:YES];
     } else if (cell == self.exportContainerCell) {
@@ -122,7 +122,7 @@
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 1) { // filesystems
         if (!FsIsManaged()) {
-            return @"The current filesystem is not managed by ios-linuxkit.";
+            return @"The current filesystem is not managed by V-MINE.";
         }
     }
     return [super tableView:tableView titleForFooterInSection:section];

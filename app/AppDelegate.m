@@ -1,6 +1,6 @@
 //
 //  AppDelegate.m
-//  iSH
+//  V-MINE
 //
 //  Created by Theodore Dubois on 10/17/17.
 //
@@ -96,7 +96,7 @@ static int bootError;
 
 #ifdef ISH_FFMPEG_TEST
     // Register built-in native handlers (fake_ffmpeg) for the ffmpeg test target.
-    // This is NOT called in the standard iSH ARM64 target.
+    // This is NOT called in the standard V-MINE ARM64 target.
     native_builtins_init();
 #endif
 
@@ -298,7 +298,7 @@ void NetworkReachabilityCallback(SCNetworkReachabilityRef target, SCNetworkReach
         [UIView setAnimationsEnabled:NO];
 
 #if !ISH_LINUX
-    NSString *ishVersion = [NSString stringWithFormat:@"ios-linuxkit %@ (%@)",
+    NSString *ishVersion = [NSString stringWithFormat:@"V-MINE %@ (%@)",
                          [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
                          [NSBundle.mainBundle objectForInfoDictionaryKey:(NSString *) kCFBundleVersionKey]];
     extern const char *proc_ish_version;

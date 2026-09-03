@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "74B674687BE68C2FE768F439"
-               BuildableName = "iSH ARM64 ffmpeg.app"
-               BlueprintName = "iSH-ARM64-ffmpeg"
-               ReferencedContainer = "container:iSH.xcodeproj">
+               BuildableName = "V-MINE ARM64 ffmpeg.app"
+               BlueprintName = "V-MINE-ARM64-ffmpeg"
+               ReferencedContainer = "container:V-MINE.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -31,9 +31,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "74B674687BE68C2FE768F439"
-            BuildableName = "iSH ARM64 ffmpeg.app"
-            BlueprintName = "iSH-ARM64-ffmpeg"
-            ReferencedContainer = "container:iSH.xcodeproj">
+            BuildableName = "V-MINE ARM64 ffmpeg.app"
+            BlueprintName = "V-MINE-ARM64-ffmpeg"
+            ReferencedContainer = "container:V-MINE.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -54,9 +54,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "74B674687BE68C2FE768F439"
-            BuildableName = "iSH ARM64 ffmpeg.app"
-            BlueprintName = "iSH-ARM64-ffmpeg"
-            ReferencedContainer = "container:iSH.xcodeproj">
+            BuildableName = "V-MINE ARM64 ffmpeg.app"
+            BlueprintName = "V-MINE-ARM64-ffmpeg"
+            ReferencedContainer = "container:V-MINE.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -71,9 +71,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "74B674687BE68C2FE768F439"
-            BuildableName = "iSH ARM64 ffmpeg.app"
-            BlueprintName = "iSH-ARM64-ffmpeg"
-            ReferencedContainer = "container:iSH.xcodeproj">
+            BuildableName = "V-MINE ARM64 ffmpeg.app"
+            BlueprintName = "V-MINE-ARM64-ffmpeg"
+            ReferencedContainer = "container:V-MINE.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

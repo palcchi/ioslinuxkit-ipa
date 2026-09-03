@@ -7,7 +7,7 @@ on:
       - x86_64-guest
     paths:
       - 'app/**'
-      - 'iSH.xcodeproj/**'
+      - 'V-MINE.xcodeproj/**'
       - '.github/workflows/v-mine-ios.yml'
 
 jobs:
@@ -33,8 +33,8 @@ jobs:
           set -o pipefail
           rm -rf build-vmine
           xcodebuild \
-            -project iSH.xcodeproj \
-            -scheme iSH-ARM64 \
+            -project V-MINE.xcodeproj \
+            -scheme V-MINE-ARM64 \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \

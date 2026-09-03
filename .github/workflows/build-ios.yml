@@ -1,4 +1,4 @@
-name: Build iSH ARM64 IPA
+name: Build V-MINE ARM64 IPA
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - master
     paths:
       - 'app/**'
-      - 'iSH.xcodeproj/**'
+      - 'V-MINE.xcodeproj/**'
       - '.github/workflows/build-ios.yml'
 
 jobs:
@@ -29,28 +29,28 @@ jobs:
       - name: Install build tools
         run: brew install meson ninja
 
-      - name: Prepare iSH build
+      - name: Prepare V-MINE build
         run: git submodule update --init --recursive
 
       - name: Verify ARM64 terminal renderer
         run: |
           set -euo pipefail
           SETTINGS=$(xcodebuild \
-            -project iSH.xcodeproj \
-            -scheme iSH-ARM64 \
+            -project V-MINE.xcodeproj \
+            -scheme V-MINE-ARM64 \
             -configuration Release \
             -showBuildSettings)
           echo "$SETTINGS" | grep 'GCC_PREPROCESSOR_DEFINITIONS' | head -1
           echo "$SETTINGS" | grep -q 'USE_XTERM_RENDERER=1'
-          echo 'xterm renderer enabled for iSH-ARM64'
+          echo 'xterm renderer enabled for V-MINE-ARM64'
 
-      - name: Build iSH ARM64
+      - name: Build V-MINE ARM64
         run: |
           set -o pipefail
           rm -rf build-arm64
           xcodebuild \
-            -project iSH.xcodeproj \
-            -scheme iSH-ARM64 \
+            -project V-MINE.xcodeproj \
+            -scheme V-MINE-ARM64 \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -85,15 +85,15 @@ jobs:
       - name: Package IPA
         run: |
           set -euo pipefail
-          rm -rf Payload iSH-ARM64.ipa
+          rm -rf Payload V-MINE-ARM64.ipa
           mkdir -p Payload
           cp -R "$APP" Payload/
-          /usr/bin/zip -qry iSH-ARM64.ipa Payload
-          unzip -l iSH-ARM64.ipa | grep -E 'xterm-term.html|xterm-term-bridge.js|xterm-classic.js|addon-canvas.js|xterm.css|term.css'
-          ls -lh iSH-ARM64.ipa
+          /usr/bin/zip -qry V-MINE-ARM64.ipa Payload
+          unzip -l V-MINE-ARM64.ipa | grep -E 'xterm-term.html|xterm-term-bridge.js|xterm-classic.js|addon-canvas.js|xterm.css|term.css'
+          ls -lh V-MINE-ARM64.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: iSH-ARM64-IPA
-          path: iSH-ARM64.ipa
+          name: V-MINE-ARM64-IPA
+          path: V-MINE-ARM64.ipa

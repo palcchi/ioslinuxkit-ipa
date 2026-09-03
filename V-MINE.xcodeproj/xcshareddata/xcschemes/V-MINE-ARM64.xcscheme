@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA0000011F96D90D00FFB7A4"
-               BuildableName = "iSH ARM64.app"
-               BlueprintName = "iSH-ARM64"
-               ReferencedContainer = "container:iSH.xcodeproj">
+               BuildableName = "V-MINE ARM64.app"
+               BlueprintName = "V-MINE-ARM64"
+               ReferencedContainer = "container:V-MINE.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -31,9 +31,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000011F96D90D00FFB7A4"
-            BuildableName = "iSH ARM64.app"
-            BlueprintName = "iSH-ARM64"
-            ReferencedContainer = "container:iSH.xcodeproj">
+            BuildableName = "V-MINE ARM64.app"
+            BlueprintName = "V-MINE-ARM64"
+            ReferencedContainer = "container:V-MINE.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -54,9 +54,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000011F96D90D00FFB7A4"
-            BuildableName = "iSH ARM64.app"
-            BlueprintName = "iSH-ARM64"
-            ReferencedContainer = "container:iSH.xcodeproj">
+            BuildableName = "V-MINE ARM64.app"
+            BlueprintName = "V-MINE-ARM64"
+            ReferencedContainer = "container:V-MINE.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -71,9 +71,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000011F96D90D00FFB7A4"
-            BuildableName = "iSH ARM64.app"
-            BlueprintName = "iSH-ARM64"
-            ReferencedContainer = "container:iSH.xcodeproj">
+            BuildableName = "V-MINE ARM64.app"
+            BlueprintName = "V-MINE-ARM64"
+            ReferencedContainer = "container:V-MINE.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

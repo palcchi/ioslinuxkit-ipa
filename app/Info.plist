@@ -25,14 +25,14 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>V-MINE uses the local network to host and connect to your Bedrock Dedicated Server.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Programs running in ios-linuxkit will be allowed to track your location in the background.</string>
+	<string>Programs running in V-MINE will be allowed to track your location in the background.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Programs running in ios-linuxkit will be allowed to track your location in the background.</string>
+	<string>Programs running in V-MINE will be allowed to track your location in the background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Programs running in ios-linuxkit will be allowed to see your location.</string>
+	<string>Programs running in V-MINE will be allowed to see your location.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
-		<string>app.ish.scene</string>
+		<string>app.vmine.scene</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
