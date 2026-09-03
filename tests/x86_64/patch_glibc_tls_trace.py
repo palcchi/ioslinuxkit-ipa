@@ -3,7 +3,6 @@ from pathlib import Path
 
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
-
 anchor = """static int guest_write(struct cpu_state *cpu, addr_t addr, const void *value, size_t size) {
 """
 insert = """static int guest_write(struct cpu_state *cpu, addr_t addr, const void *value, size_t size) {
@@ -24,20 +23,5 @@ insert = """static int guest_write(struct cpu_state *cpu, addr_t addr, const voi
 """
 if anchor not in s:
     raise SystemExit("guest_write anchor missing")
-s = s.replace(anchor, insert, 1)
-
-anchor = """        case ARCH_SET_FS:
-            cpu->tls_ptr = value;
-            return 0;
-"""
-replace = """        case ARCH_SET_FS:
-            cpu->tls_ptr = value;
-            fprintf(stderr, "[vmine-arch-prctl] ARCH_SET_FS=%llx\\n",
-                    (unsigned long long)value);
-            return 0;
-"""
-if anchor not in s:
-    raise SystemExit("ARCH_SET_FS anchor missing")
-s = s.replace(anchor, replace, 1)
-path.write_text(s)
+path.write_text(s.replace(anchor, insert, 1))
 print("patched targeted x86_64 TLS diagnostics")
