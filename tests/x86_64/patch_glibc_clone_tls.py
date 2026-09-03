@@ -7,6 +7,16 @@ old = """#if defined(GUEST_ARM64)
         // On ARM64, the TLS argument is the actual TLS pointer value (for TPIDR_EL0),
         // not a pointer to a descriptor structure.
         task->cpu.tls_ptr = tls_addr;
+#if defined(GUEST_X86_64)
+        // glibc expects the TCB head's first machine word to point back to the
+        // TCB.  Keep it explicitly 64-bit: legacy i386 helpers otherwise leave
+        // only the low half populated for newly cloned threads.
+        qword_t tls_self = (qword_t) tls_addr;
+        if (user_write_task(task, tls_addr, &tls_self, sizeof(tls_self))) {
+            err = _EFAULT;
+            goto fail_free_sighand;
+        }
+#endif
 #else
         err = task_set_thread_area(task, tls_addr);
 """
