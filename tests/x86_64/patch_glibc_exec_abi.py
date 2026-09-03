@@ -82,6 +82,7 @@ nr_replace = '''        case 80:  return 49;   // chdir
         case 191: return 8;    // getxattr
         case 192: return 9;    // lgetxattr
         case 204: return 123;  // sched_getaffinity
+        case 307: return 269;  // sendmmsg
 '''
 if nr_anchor not in i:
     raise SystemExit("readlink syscall-number anchor missing")
