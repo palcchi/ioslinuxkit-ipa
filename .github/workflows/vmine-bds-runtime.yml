@@ -94,11 +94,11 @@ jobs:
         run: |
           set +e
           rm -f bds-normal.log bds-startup.ok
-          setsid timeout --foreground 1200 ./build-x86_64/ish -f bds-fakefs /bin/sh -c 'cd / && exec /bedrock_server' >bds-normal.log 2>&1 &
+          setsid timeout --foreground 420 ./build-x86_64/ish -f bds-fakefs /bin/sh -c 'cd / && exec /bedrock_server' >bds-normal.log 2>&1 &
           vmine_pid=$!
           set -e
 
-          for attempt in $(seq 1 240); do
+          for attempt in $(seq 1 84); do
             if grep -Eqi ':[[:space:]]*4ABC[[:space:]]' /proc/net/udp /proc/net/udp6 2>/dev/null; then
               echo udp-19132 > bds-startup.ok
               break
