@@ -38,5 +38,30 @@ new_read = """            } else {
 """
 if old_read not in s:
     raise SystemExit("MOV TLS read anchor missing")
-path.write_text(s.replace(old_read, new_read, 1))
+s = s.replace(old_read, new_read, 1)
+
+mov_anchor = """        // MOV r/m, r and MOV r, r/m.
+"""
+mov_fast = """        // Fast path for MOV r64, FS:[disp32] in the absolute SIB form used by
+        // glibc pthread startup. FS:0 is the TCB self pointer.
+        if (fs_prefix && (rex & 0x8) && op == 0x8b) {
+            uint8_t modrm, sib;
+            uint32_t disp;
+            if (fetch_u8(cpu, ip + 1, &modrm) == 0 &&
+                fetch_u8(cpu, ip + 2, &sib) == 0 &&
+                fetch_u32(cpu, ip + 3, &disp) == 0 &&
+                (modrm & 0xc7) == 0x04 && sib == 0x25 && disp == 0) {
+                unsigned reg = ((modrm >> 3) & 7) | ((rex & 0x4) ? 8 : 0);
+                x86_64_set_reg(cpu, reg, cpu->tls_ptr);
+                cpu->pc = ip + 7;
+                cpu->cycle++;
+                continue;
+            }
+        }
+
+        // MOV r/m, r and MOV r, r/m.
+"""
+if mov_anchor not in s:
+    raise SystemExit("MOV fast-path anchor missing")
+path.write_text(s.replace(mov_anchor, mov_fast, 1))
 print("patched x86_64 FS TLS self-pointer reads")
