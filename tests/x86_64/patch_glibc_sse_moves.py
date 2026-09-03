@@ -64,13 +64,6 @@ insert = r'''            // F3/F2 0F 10/11: MOVSS/MOVSD. Scalar stores must writ
                 unsigned xmm;
                 addr_t next;
                 if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
-                if (op2 == 0x10) {
-                    fprintf(stderr,
-                            "[vmine-0f10-decoded] xmm=%u isreg=%d rmreg=%u addr=%llx next=%llx\n",
-                            xmm, rm.is_reg ? 1 : 0, rm.reg,
-                            (unsigned long long)rm.addr,
-                            (unsigned long long)next);
-                }
                 if (xmm >= 16) goto undefined;
                 bool load = (op2 == 0x10 || op2 == 0x28);
                 if (load) {

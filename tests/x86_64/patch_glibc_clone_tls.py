@@ -3,9 +3,6 @@ from pathlib import Path
 
 path = Path("kernel/fork.c")
 s = path.read_text()
-if '#include <stdio.h>\n' not in s:
-    s = s.replace('#include <stddef.h>\n', '#include <stddef.h>\n#include <stdio.h>\n', 1)
-
 old = """#if defined(GUEST_ARM64)
         // On ARM64, the TLS argument is the actual TLS pointer value (for TPIDR_EL0),
         // not a pointer to a descriptor structure.
@@ -14,8 +11,8 @@ old = """#if defined(GUEST_ARM64)
         err = task_set_thread_area(task, tls_addr);
 """
 new = """#if defined(GUEST_ARM64) || defined(GUEST_X86_64)
-        // ARM64 and Linux x86_64 clone pass the actual thread-pointer value.
-        // Only the legacy i386 ABI passes a user_desc descriptor here.
+        // Both 64-bit ABIs pass the actual thread pointer. Legacy i386 alone
+        // passes a user_desc structure.
         task->cpu.tls_ptr = tls_addr;
 #if defined(GUEST_X86_64)
         qword_t tls_self = (qword_t) tls_addr;
@@ -31,41 +28,27 @@ if old not in s:
     raise SystemExit("clone TLS ABI anchor missing")
 s = s.replace(old, new, 1)
 
-clone3_anchor = """    if (args.pidfd != 0 || args.set_tid != 0 || args.set_tid_size != 0 || args.cgroup != 0)
+clone3_old = """    if (args.pidfd != 0 || args.set_tid != 0 || args.set_tid_size != 0 || args.cgroup != 0)
         return _EINVAL;
 """
-clone3_new = """#ifdef GUEST_X86_64
-    fprintf(stderr,
-            "[vmine-clone3-args] flags=%llx pidfd=%llx child_tid=%llx parent_tid=%llx "
-            "exit_signal=%llx stack=%llx stack_size=%llx tls=%llx set_tid=%llx "
-            "set_tid_size=%llx cgroup=%llx\\n",
-            (unsigned long long)args.flags, (unsigned long long)args.pidfd,
-            (unsigned long long)args.child_tid, (unsigned long long)args.parent_tid,
-            (unsigned long long)args.exit_signal, (unsigned long long)args.stack,
-            (unsigned long long)args.stack_size, (unsigned long long)args.tls,
-            (unsigned long long)args.set_tid, (unsigned long long)args.set_tid_size,
-            (unsigned long long)args.cgroup);
-#endif
-    // pidfd is ignored unless CLONE_PIDFD is requested. glibc initializes the
-    // output slot together with parent_tid for ordinary pthread creation.
+clone3_new = """    // glibc initializes pidfd storage together with parent_tid even when
+    // CLONE_PIDFD is absent; it is ignored in that case.
     if (args.set_tid != 0 || args.set_tid_size != 0 || args.cgroup != 0)
         return _EINVAL;
 """
-if clone3_anchor not in s:
+if clone3_old not in s:
     raise SystemExit("clone3 validation anchor missing")
-s = s.replace(clone3_anchor, clone3_new, 1)
+s = s.replace(clone3_old, clone3_new, 1)
 
-ret_anchor = """    CPU_RETVAL(task->cpu) = 0;
+ret_old = """    CPU_RETVAL(task->cpu) = 0;
 """
 ret_new = """    CPU_RETVAL(task->cpu) = 0;
 #ifdef GUEST_X86_64
-    // The interpreter resumes a pending syscall from the shared compatibility
-    // return slot. The child must see clone returning zero, not the inherited
-    // clone3 argument pointer.
+    // The interpreter resumes from this compatibility return slot.
     task->cpu.regs[0] = 0;
 #endif
 """
-if ret_anchor not in s:
+if ret_old not in s:
     raise SystemExit("clone child return anchor missing")
-path.write_text(s.replace(ret_anchor, ret_new, 1))
+path.write_text(s.replace(ret_old, ret_new, 1))
 print("patched direct x86_64 clone TLS, child return, and clone3 validation")

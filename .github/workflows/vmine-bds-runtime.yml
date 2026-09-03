@@ -89,41 +89,46 @@ jobs:
           set -euo pipefail
           timeout 20 ./build-x86_64/ish -f bds-fakefs /bin/ls -l /lib64/ld-linux-x86-64.so.2 /bedrock_server 2>&1 | tee bds-visibility.log
 
-      - name: Run BDS through explicit dynamic loader
+      - name: Run and verify BDS startup
         shell: bash
         run: |
           set +e
-          timeout 20 ./build-x86_64/ish -f bds-fakefs /lib64/ld-linux-x86-64.so.2 /bedrock_server >bds-loader.log 2>&1
-          echo $? > bds-loader.rc
+          rm -f bds-normal.log bds-startup.ok
+          setsid timeout --foreground 300 ./build-x86_64/ish -f bds-fakefs /bedrock_server >bds-normal.log 2>&1 &
+          vmine_pid=$!
           set -e
-          echo '--- BDS loader tail (last 400 lines) ---'
-          tail -n 400 bds-loader.log
-          echo "BDS_LOADER_RC=$(cat bds-loader.rc)"
 
-      - name: Run BDS through normal ELF exec
-        shell: bash
-        run: |
+          for attempt in $(seq 1 60); do
+            if grep -Eqi 'server started|IPv4 supported|Dedicated Server' bds-normal.log 2>/dev/null; then
+              echo log > bds-startup.ok
+              break
+            fi
+            if grep -Eqi ':[[:space:]]*4ABC[[:space:]]' /proc/net/udp /proc/net/udp6 2>/dev/null; then
+              echo udp-19132 > bds-startup.ok
+              break
+            fi
+            if ! kill -0 "$vmine_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [ -f bds-startup.ok ]; then
+            kill -- "-$vmine_pid" 2>/dev/null || true
+          fi
           set +e
-          timeout 20 ./build-x86_64/ish -f bds-fakefs /bedrock_server >bds-normal.log 2>&1
+          wait "$vmine_pid"
           echo $? > bds-normal.rc
           set -e
-          echo '--- BDS normal tail (last 400 lines) ---'
+
+          echo '--- BDS tail (last 400 lines) ---'
           tail -n 400 bds-normal.log
           echo "BDS_NORMAL_RC=$(cat bds-normal.rc)"
-
-      - name: Evaluate V-MINE BDS frontier
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -Eqi 'server started|IPv4 supported|19132|Dedicated Server' bds-loader.log bds-normal.log; then
-            echo 'V-MINE BDS STARTUP FRONTIER: REACHED'
+          if [ -f bds-startup.ok ]; then
+            echo "V-MINE BDS STARTUP: $(cat bds-startup.ok)"
             exit 0
           fi
-
-          echo '--- loader frontier ---'
-          grep -E -m1 -B5 -A20 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal|x86-gpf|x86-undefined' bds-loader.log || tail -80 bds-loader.log || true
-          echo '--- normal exec frontier ---'
-          grep -E -m1 -B5 -A20 'illegal instruction|segmentation|not found|not implemented|undefined|error while loading shared libraries|failed|fatal|x86-gpf|x86-undefined' bds-normal.log || tail -80 bds-normal.log || true
+          echo 'V-MINE BDS STARTUP: NOT REACHED'
           exit 1
 
       - name: Upload BDS logs
@@ -132,8 +137,7 @@ jobs:
         with:
           name: vmine-bds-frontier
           path: |
-            bds-loader.log
             bds-normal.log
-            bds-loader.rc
             bds-normal.rc
             bds-visibility.log
+            bds-startup.ok
