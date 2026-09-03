@@ -27,4 +27,50 @@ if old not in s:
 s = s.replace(old, new, 1)
 
 p.write_text(s)
-print("patched x86_64 exec frontier diagnostics")
+
+# Keep runtime syscall diagnostics focused: report each unsupported x86_64
+# syscall once, plus the result of resource discovery and network creation.
+interp = Path("emu/arch/x86_64/interp.c")
+i = interp.read_text()
+missing_anchor = '''                if (compat_nr < 0) {
+                    x86_64_set_rax(cpu, (uint64_t)(int64_t)-X86_64_ENOSYS);
+                    continue;
+                }
+'''
+missing_replace = '''                if (compat_nr < 0) {
+                    static bool missing_seen[512];
+                    if (guest_nr >= 512 || !missing_seen[guest_nr]) {
+                        if (guest_nr < 512) missing_seen[guest_nr] = true;
+                        fprintf(stderr, "vmine-x86-missing-syscall nr=%llu\\n",
+                                (unsigned long long)guest_nr);
+                    }
+                    x86_64_set_rax(cpu, (uint64_t)(int64_t)-X86_64_ENOSYS);
+                    continue;
+                }
+'''
+if missing_anchor not in i:
+    raise SystemExit("missing-syscall diagnostic anchor missing")
+i = i.replace(missing_anchor, missing_replace, 1)
+
+result_anchor = '''    if (cpu->x86_syscall_pending) {
+        x86_64_set_rax(cpu, cpu->regs[0]);
+        cpu->x86_syscall_pending = false;
+    }
+'''
+result_replace = '''    if (cpu->x86_syscall_pending) {
+        if (cpu->x86_last_syscall == 41 || cpu->x86_last_syscall == 49 ||
+            cpu->x86_last_syscall == 89 || cpu->x86_last_syscall == 291) {
+            fprintf(stderr, "vmine-x86-syscall nr=%llu result=%lld\\n",
+                    (unsigned long long)cpu->x86_last_syscall,
+                    (long long)cpu->regs[0]);
+        }
+        x86_64_set_rax(cpu, cpu->regs[0]);
+        cpu->x86_syscall_pending = false;
+    }
+'''
+if result_anchor not in i:
+    raise SystemExit("syscall-result diagnostic anchor missing")
+i = i.replace(result_anchor, result_replace, 1)
+interp.write_text(i)
+
+print("patched x86_64 exec and focused syscall frontier diagnostics")
