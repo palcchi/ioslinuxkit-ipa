@@ -53,5 +53,19 @@ clone3_new = """#ifdef GUEST_X86_64
 """
 if clone3_anchor not in s:
     raise SystemExit("clone3 validation anchor missing")
-path.write_text(s.replace(clone3_anchor, clone3_new, 1))
-print("patched direct x86_64 clone TLS and clone3 validation")
+s = s.replace(clone3_anchor, clone3_new, 1)
+
+ret_anchor = """    CPU_RETVAL(task->cpu) = 0;
+"""
+ret_new = """    CPU_RETVAL(task->cpu) = 0;
+#ifdef GUEST_X86_64
+    // The interpreter resumes a pending syscall from the shared compatibility
+    // return slot. The child must see clone returning zero, not the inherited
+    // clone3 argument pointer.
+    task->cpu.regs[0] = 0;
+#endif
+"""
+if ret_anchor not in s:
+    raise SystemExit("clone child return anchor missing")
+path.write_text(s.replace(ret_anchor, ret_new, 1))
+print("patched direct x86_64 clone TLS, child return, and clone3 validation")
