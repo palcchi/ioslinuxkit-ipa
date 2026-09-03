@@ -96,7 +96,8 @@ jobs:
           timeout 90 ./build-x86_64/ish -f bds-fakefs /lib64/ld-linux-x86-64.so.2 /bedrock_server >bds-loader.log 2>&1
           echo $? > bds-loader.rc
           set -e
-          cat bds-loader.log
+          echo '--- BDS loader tail (last 160 lines) ---'
+          tail -n 160 bds-loader.log
           echo "BDS_LOADER_RC=$(cat bds-loader.rc)"
 
       - name: Run BDS through normal ELF exec
@@ -106,7 +107,8 @@ jobs:
           timeout 90 ./build-x86_64/ish -f bds-fakefs /bedrock_server >bds-normal.log 2>&1
           echo $? > bds-normal.rc
           set -e
-          cat bds-normal.log
+          echo '--- BDS normal tail (last 160 lines) ---'
+          tail -n 160 bds-normal.log
           echo "BDS_NORMAL_RC=$(cat bds-normal.rc)"
 
       - name: Evaluate V-MINE BDS frontier
