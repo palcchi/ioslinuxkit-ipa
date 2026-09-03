@@ -4,7 +4,80 @@ from pathlib import Path
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
 anchor = '''            // SYSCALL.\n'''
-insert = r'''            // 0F 2E/2F /r: UCOMISS/COMISS xmm, xmm/m32.
+insert = r'''            // 0F C2 /r ib: CMPPS/CMPPD/CMPSS/CMPSD. Legacy predicates
+            // 0..7 produce an all-ones or all-zeros mask per selected lane.
+            if (op2 == 0xc2 &&
+                (rep_prefix == 0 || rep_prefix == 0xf2 || rep_prefix == 0xf3)) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src = {.u128 = 0};
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                bool is_double = operand16 || rep_prefix == 0xf2;
+                bool scalar = rep_prefix == 0xf2 || rep_prefix == 0xf3;
+                size_t source_size = scalar ? (is_double ? 8 : 4) : 16;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, source_size) < 0) {
+                    goto gpf;
+                }
+                uint8_t predicate;
+                if (fetch_u8(cpu, next, &predicate) < 0) goto gpf;
+                predicate &= 7;
+                union x86_64_xmm dst = cpu->xmm[xmm];
+                unsigned lanes = scalar ? 1 : (is_double ? 2 : 4);
+                for (unsigned lane = 0; lane < lanes; lane++) {
+                    bool unordered, less, equal;
+                    if (is_double) {
+                        uint64_t a_raw = dst.u64[lane], b_raw = src.u64[lane];
+                        bool a_nan = (a_raw & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL &&
+                                     (a_raw & 0x000fffffffffffffULL) != 0;
+                        bool b_nan = (b_raw & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL &&
+                                     (b_raw & 0x000fffffffffffffULL) != 0;
+                        unordered = a_nan || b_nan;
+                        double a, b;
+                        memcpy(&a, &a_raw, sizeof(a));
+                        memcpy(&b, &b_raw, sizeof(b));
+                        less = !unordered && a < b;
+                        equal = !unordered && a == b;
+                    } else {
+                        uint32_t a_raw = dst.u32[lane], b_raw = src.u32[lane];
+                        bool a_nan = (a_raw & 0x7f800000U) == 0x7f800000U &&
+                                     (a_raw & 0x007fffffU) != 0;
+                        bool b_nan = (b_raw & 0x7f800000U) == 0x7f800000U &&
+                                     (b_raw & 0x007fffffU) != 0;
+                        unordered = a_nan || b_nan;
+                        float a, b;
+                        memcpy(&a, &a_raw, sizeof(a));
+                        memcpy(&b, &b_raw, sizeof(b));
+                        less = !unordered && a < b;
+                        equal = !unordered && a == b;
+                    }
+                    bool yes;
+                    switch (predicate) {
+                        case 0: yes = equal; break;
+                        case 1: yes = less; break;
+                        case 2: yes = less || equal; break;
+                        case 3: yes = unordered; break;
+                        case 4: yes = unordered || !equal; break;
+                        case 5: yes = unordered || !less; break;
+                        case 6: yes = unordered || !(less || equal); break;
+                        default: yes = !unordered; break;
+                    }
+                    if (is_double)
+                        dst.u64[lane] = yes ? UINT64_MAX : 0;
+                    else
+                        dst.u32[lane] = yes ? UINT32_MAX : 0;
+                }
+                cpu->xmm[xmm] = dst;
+                cpu->pc = next + 1;
+                cpu->cycle++;
+                continue;
+            }
+
+            // 0F 2E/2F /r: UCOMISS/COMISS xmm, xmm/m32.
             // 66 0F 2E/2F /r: UCOMISD/COMISD xmm, xmm/m64.
             // COMI and UCOMI differ in which NaNs raise an unmasked SIMD
             // exception. MXCSR exceptions are not modeled yet, but their
@@ -149,4 +222,4 @@ if anchor not in s:
     raise SystemExit("0F dispatch anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with packed and scalar SSE compares")
+print("patched x86_64 interpreter with CMP vector masks and scalar SSE compares")
