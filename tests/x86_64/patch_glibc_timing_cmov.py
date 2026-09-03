@@ -1,6 +1,22 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+# x86_64 and AArch64 both use the 64-bit time ABI. The original non-ARM
+# fallback is i386-style (two 32-bit fields), which corrupts clock_gettime
+# output and futex absolute deadlines.
+time_h = Path("kernel/time.h")
+th = time_h.read_text()
+time_anchor = '''#ifdef GUEST_ARM64
+struct timeval_ {
+'''
+time_replace = '''#if defined(GUEST_ARM64) || defined(GUEST_X86_64)
+struct timeval_ {
+'''
+if time_anchor not in th:
+    raise SystemExit("64-bit time ABI anchor missing")
+th = th.replace(time_anchor, time_replace, 1)
+time_h.write_text(th)
+
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
 anchor = '''            // SYSCALL.\n'''
@@ -39,4 +55,4 @@ if anchor not in s:
     raise SystemExit("0F dispatch anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with RDTSC and CMOVcc")
+print("patched x86_64 64-bit time ABI, RDTSC, and CMOVcc")
