@@ -32,6 +32,12 @@ p.write_text(s)
 # syscall once, plus the result of resource discovery and network creation.
 interp = Path("emu/arch/x86_64/interp.c")
 i = interp.read_text()
+include_anchor = '''#include <string.h>\n'''
+if include_anchor not in i:
+    raise SystemExit("stdio include anchor missing")
+i = i.replace(include_anchor, '''#include <string.h>
+#include <stdio.h>
+''', 1)
 missing_anchor = '''                if (compat_nr < 0) {
                     x86_64_set_rax(cpu, (uint64_t)(int64_t)-X86_64_ENOSYS);
                     continue;
