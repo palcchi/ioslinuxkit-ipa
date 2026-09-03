@@ -8,6 +8,18 @@ if '#include <stdio.h>\n' not in s:
 old = """    cpu->regs[3] = x86_64_get_reg(cpu, X86_64_R10);
     cpu->regs[4] = x86_64_get_reg(cpu, X86_64_R8);
     cpu->regs[5] = x86_64_get_reg(cpu, X86_64_R9);
+    static bool vmine_after_clone;
+    static unsigned vmine_syscall_traces;
+    if (guest_nr == 435 || guest_nr == 56)
+        vmine_after_clone = true;
+    if (vmine_after_clone && vmine_syscall_traces++ < 1000)
+        fprintf(stderr,
+                "[vmine-syscall] nr=%llu a0=%llx a1=%llx a2=%llx a3=%llx\\n",
+                (unsigned long long)guest_nr,
+                (unsigned long long)cpu->regs[0],
+                (unsigned long long)cpu->regs[1],
+                (unsigned long long)cpu->regs[2],
+                (unsigned long long)cpu->regs[3]);
     cpu->x86_syscall_pending = true;
 """
 new = """    cpu->regs[3] = x86_64_get_reg(cpu, X86_64_R10);
