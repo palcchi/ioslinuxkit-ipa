@@ -31,7 +31,9 @@ new = """#if defined(GUEST_ARM64) || defined(GUEST_X86_64)
 if old not in s:
     raise SystemExit("clone TLS ABI anchor missing")
 s = s.replace(old, new, 1)
-clone3_anchor = """    if (args.pidfd != 0 || args.set_tid != 0 || args.set_tid_size != 0 || args.cgroup != 0)
+clone3_anchor = """    // pidfd is an output address and glibc may initialize it even when
+    // CLONE_PIDFD is absent. It is semantically ignored in that case.
+    if (args.set_tid != 0 || args.set_tid_size != 0 || args.cgroup != 0)
         return _EINVAL;
 """
 clone3_trace = """#ifdef GUEST_X86_64
