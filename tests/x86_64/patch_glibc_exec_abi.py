@@ -66,8 +66,11 @@ i = i.replace(include_anchor, '''#include <string.h>
 nr_anchor = '''        case 80:  return 49;   // chdir\n'''
 nr_replace = '''        case 80:  return 49;   // chdir
         case 4:   return 79;   // stat -> newfstatat adapter
+        case 7:   return 4;    // poll via x86_64-only compatibility slot
         case 21:  return 48;   // access -> faccessat adapter
+        case 82:  return 38;   // rename -> renameat adapter
         case 83:  return 34;   // mkdir -> mkdirat adapter
+        case 87:  return 35;   // unlink -> unlinkat adapter
         case 89:  return 78;   // readlink -> readlinkat adapter
         case 99:  return 179;  // sysinfo
         case 131: return 132;  // sigaltstack
@@ -103,6 +106,16 @@ bridge_replace = '''    cpu->regs[8] = (uint64_t) compat_nr;
         cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
         cpu->regs[2] = x86_64_get_reg(cpu, X86_64_RSI);
         cpu->regs[3] = cpu->regs[4] = cpu->regs[5] = 0;
+    } else if (guest_nr == 82) {
+        cpu->regs[0] = (uint64_t)(int64_t)-100;
+        cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
+        cpu->regs[2] = (uint64_t)(int64_t)-100;
+        cpu->regs[3] = x86_64_get_reg(cpu, X86_64_RSI);
+        cpu->regs[4] = cpu->regs[5] = 0;
+    } else if (guest_nr == 87) {
+        cpu->regs[0] = (uint64_t)(int64_t)-100;
+        cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
+        cpu->regs[2] = cpu->regs[3] = cpu->regs[4] = cpu->regs[5] = 0;
     } else if (guest_nr == 89) {
         cpu->regs[0] = (uint64_t)(int64_t)-100;
         cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
@@ -145,6 +158,22 @@ if time_anchor not in i:
     raise SystemExit("time syscall anchor missing")
 i = i.replace(time_anchor, time_replace, 1)
 interp.write_text(i)
+
+# Linux x86_64 has poll(2), while AArch64 only assigns ppoll in its ABI.
+# Reuse the otherwise stubbed compatibility slot 4 for the existing sys_poll.
+calls = Path("kernel/arch/arm64/calls.c")
+cs = calls.read_text()
+poll_anchor = '''    [4]   = (syscall_t) syscall_stub, // io_getevents\n'''
+poll_replace = '''#ifdef GUEST_X86_64
+    [4]   = (syscall_t) sys_poll, // x86_64 poll compatibility slot
+#else
+    [4]   = (syscall_t) syscall_stub, // io_getevents
+#endif
+'''
+if poll_anchor not in cs:
+    raise SystemExit("poll compatibility table anchor missing")
+cs = cs.replace(poll_anchor, poll_replace, 1)
+calls.write_text(cs)
 
 test = Path("tests/x86_64/direct_guest_smoke.c")
 t = test.read_text()
