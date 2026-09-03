@@ -39,6 +39,44 @@ early_insert = r'''        // 66 0F 6C/6D: PUNPCKLQDQ/PUNPCKHQDQ. Keep this earl
             }
         }
 
+        // 0F 14/15: UNPCKLPS/UNPCKHPS, or with 66 mandatory
+        // prefix UNPCKLPD/UNPCKHPD. These are bitwise lane transports.
+        if (op == 0x0f && rep_prefix == 0) {
+            uint8_t sseop;
+            if (fetch_u8(cpu, ip + 1, &sseop) < 0) goto gpf;
+            if (sseop == 0x14 || sseop == 0x15) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src, old, dst;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, sizeof(src)) < 0) {
+                    goto gpf;
+                }
+                old = cpu->xmm[xmm];
+                dst.u128 = 0;
+                if (operand16) {
+                    unsigned lane = sseop == 0x14 ? 0 : 1;
+                    dst.u64[0] = old.u64[lane];
+                    dst.u64[1] = src.u64[lane];
+                } else {
+                    unsigned lane = sseop == 0x14 ? 0 : 2;
+                    dst.u32[0] = old.u32[lane];
+                    dst.u32[1] = src.u32[lane];
+                    dst.u32[2] = old.u32[lane + 1];
+                    dst.u32[3] = src.u32[lane + 1];
+                }
+                cpu->xmm[xmm] = dst;
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+        }
+
 '''
 if early_anchor not in s:
     raise SystemExit("operand-size anchor missing")
@@ -95,4 +133,40 @@ if anchor not in s:
     raise SystemExit("0F dispatch anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with early qword and packed SSE2 unpack instructions")
+
+test = Path("tests/x86_64/direct_guest_smoke.c")
+t = test.read_text()
+func_anchor = '''static void test_write_exit(void) {\n'''
+func = r'''static void test_sse_fp_unpack(void) {
+    memset(memory, 0, sizeof(memory));
+    const uint8_t program[] = {
+        0x66,0x0f,0x15,0xd1, // unpckhpd xmm2, xmm1
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x48,0x31,0xff,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    cpu.xmm[2].u64[0] = 0x1111111111111111ULL;
+    cpu.xmm[2].u64[1] = 0x2222222222222222ULL;
+    cpu.xmm[1].u64[0] = 0x3333333333333333ULL;
+    cpu.xmm[1].u64[1] = 0x4444444444444444ULL;
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL && cpu.x86_last_syscall == 60);
+    assert(cpu.xmm[2].u64[0] == 0x2222222222222222ULL);
+    assert(cpu.xmm[2].u64[1] == 0x4444444444444444ULL);
+    puts("DIRECT X86_64 SSE FP UNPACK: PASS");
+}
+
+'''
+if func_anchor not in t:
+    raise SystemExit("SSE FP unpack function anchor missing")
+t = t.replace(func_anchor, func + func_anchor, 1)
+main_anchor = '''    test_write_exit();\n'''
+if main_anchor not in t:
+    raise SystemExit("SSE FP unpack main anchor missing")
+t = t.replace(main_anchor, '''    test_sse_fp_unpack();\n    test_write_exit();\n''', 1)
+test.write_text(t)
+
+print("patched x86_64 interpreter with integer and floating-point SSE unpack instructions")
