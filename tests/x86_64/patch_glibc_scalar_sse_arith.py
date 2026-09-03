@@ -6,10 +6,12 @@ s = interp.read_text()
 anchor = '''            // SYSCALL.\n'''
 insert = r'''            // Scalar SSE/SSE2 arithmetic. F3 selects float, F2 selects double.
             // 0F 58: ADDSS/ADDSD, 0F 59: MULSS/MULSD,
-            // 0F 5C: SUBSS/SUBSD, 0F 5E: DIVSS/DIVSD.
+            // 0F 5C: SUBSS/SUBSD, 0F 5D: MINSS/MINSD,
+            // 0F 5E: DIVSS/DIVSD, 0F 5F: MAXSS/MAXSD.
             // Only the low scalar lane changes; upper destination bits survive.
             if ((rep_prefix == 0xf3 || rep_prefix == 0xf2) &&
-                (op2 == 0x58 || op2 == 0x59 || op2 == 0x5c || op2 == 0x5e)) {
+                (op2 == 0x58 || op2 == 0x59 || op2 == 0x5c || op2 == 0x5d ||
+                 op2 == 0x5e || op2 == 0x5f)) {
                 struct rm_operand rm;
                 unsigned xmm;
                 addr_t next;
@@ -37,7 +39,11 @@ insert = r'''            // Scalar SSE/SSE2 arithmetic. F3 selects float, F2 sel
                         case 0x58: out = dst + srcv; break;
                         case 0x59: out = dst * srcv; break;
                         case 0x5c: out = dst - srcv; break;
+                        // Legacy MIN/MAX select the source for equal values
+                        // (including signed zero) and for unordered compares.
+                        case 0x5d: out = dst < srcv ? dst : srcv; break;
                         case 0x5e: out = dst / srcv; break;
+                        case 0x5f: out = dst > srcv ? dst : srcv; break;
                         default: goto undefined;
                     }
                     memcpy(&cpu->xmm[xmm].u32[0], &out, sizeof(out));
@@ -50,7 +56,11 @@ insert = r'''            // Scalar SSE/SSE2 arithmetic. F3 selects float, F2 sel
                         case 0x58: out = dst + srcv; break;
                         case 0x59: out = dst * srcv; break;
                         case 0x5c: out = dst - srcv; break;
+                        // Legacy MIN/MAX select the source for equal values
+                        // (including signed zero) and for unordered compares.
+                        case 0x5d: out = dst < srcv ? dst : srcv; break;
                         case 0x5e: out = dst / srcv; break;
+                        case 0x5f: out = dst > srcv ? dst : srcv; break;
                         default: goto undefined;
                     }
                     memcpy(&cpu->xmm[xmm].u64[0], &out, sizeof(out));
@@ -95,6 +105,25 @@ test_insert = r'''static void test_scalar_sse_arith(void) {
     assert(cpu.xmm[0].u32[0] == fraw);
     assert(cpu.xmm[0].u32[1] == 0x11223344U);
     assert(cpu.xmm[0].u64[1] == 0x5566778899aabbccULL);
+
+    // Exact current BDS frontier: MAXSS xmm0, xmm1.
+    memset(memory, 0, sizeof(memory));
+    const uint8_t maxss_program[] = {
+        0xf3,0x0f,0x5f,0xc1,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    memcpy(memory, maxss_program, sizeof(maxss_program));
+    cpu = fresh_cpu(&mmu);
+    float minus_two = -2.0f, five = 5.0f;
+    memcpy(&cpu.xmm[0].u32[0], &minus_two, sizeof(minus_two));
+    memcpy(&cpu.xmm[1].u32[0], &five, sizeof(five));
+    cpu.xmm[0].u64[1] = 0xcafebabedeadbeefULL;
+    interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL && cpu.x86_last_syscall == 60);
+    memcpy(&fraw, &five, sizeof(fraw));
+    assert(cpu.xmm[0].u32[0] == fraw);
+    assert(cpu.xmm[0].u64[1] == 0xcafebabedeadbeefULL);
 
     // F2 path: ADDSD xmm0, xmm1, preserving the upper qword.
     memset(memory, 0, sizeof(memory));
