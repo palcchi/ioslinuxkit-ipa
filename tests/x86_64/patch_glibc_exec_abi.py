@@ -57,9 +57,28 @@ path.write_text(s)
 # The shared kernel exposes AArch64 readlinkat(2), whose argument layout differs.
 interp = Path("emu/arch/x86_64/interp.c")
 i = interp.read_text()
+include_anchor = '''#include <string.h>\n'''
+if include_anchor not in i:
+    raise SystemExit("time include anchor missing")
+i = i.replace(include_anchor, '''#include <string.h>
+#include <time.h>
+''', 1)
 nr_anchor = '''        case 80:  return 49;   // chdir\n'''
 nr_replace = '''        case 80:  return 49;   // chdir
-        case 89:  return 78;   // readlink, adapted to readlinkat below
+        case 4:   return 79;   // stat -> newfstatat adapter
+        case 21:  return 48;   // access -> faccessat adapter
+        case 83:  return 34;   // mkdir -> mkdirat adapter
+        case 89:  return 78;   // readlink -> readlinkat adapter
+        case 99:  return 179;  // sysinfo
+        case 131: return 132;  // sigaltstack
+        case 137: return 43;   // statfs
+        case 143: return 121;  // sched_getparam
+        case 144: return 119;  // sched_setscheduler
+        case 145: return 120;  // sched_getscheduler
+        case 157: return 167;  // prctl
+        case 191: return 8;    // getxattr
+        case 192: return 9;    // lgetxattr
+        case 204: return 123;  // sched_getaffinity
 '''
 if nr_anchor not in i:
     raise SystemExit("readlink syscall-number anchor missing")
@@ -74,15 +93,22 @@ bridge_anchor = '''    cpu->regs[8] = (uint64_t) compat_nr;
     cpu->regs[5] = x86_64_get_reg(cpu, X86_64_R9);
 '''
 bridge_replace = '''    cpu->regs[8] = (uint64_t) compat_nr;
-    if (guest_nr == 89) {
-        // x86_64 readlink(path, buf, size) becomes
-        // readlinkat(AT_FDCWD, path, buf, size).
+    if (guest_nr == 4) {
+        cpu->regs[0] = (uint64_t)(int64_t)-100;
+        cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
+        cpu->regs[2] = x86_64_get_reg(cpu, X86_64_RSI);
+        cpu->regs[3] = cpu->regs[4] = cpu->regs[5] = 0;
+    } else if (guest_nr == 21 || guest_nr == 83) {
+        cpu->regs[0] = (uint64_t)(int64_t)-100;
+        cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
+        cpu->regs[2] = x86_64_get_reg(cpu, X86_64_RSI);
+        cpu->regs[3] = cpu->regs[4] = cpu->regs[5] = 0;
+    } else if (guest_nr == 89) {
         cpu->regs[0] = (uint64_t)(int64_t)-100;
         cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RDI);
         cpu->regs[2] = x86_64_get_reg(cpu, X86_64_RSI);
         cpu->regs[3] = x86_64_get_reg(cpu, X86_64_RDX);
-        cpu->regs[4] = 0;
-        cpu->regs[5] = 0;
+        cpu->regs[4] = cpu->regs[5] = 0;
     } else {
         cpu->regs[0] = x86_64_get_reg(cpu, X86_64_RDI);
         cpu->regs[1] = x86_64_get_reg(cpu, X86_64_RSI);
@@ -95,6 +121,29 @@ bridge_replace = '''    cpu->regs[8] = (uint64_t) compat_nr;
 if bridge_anchor not in i:
     raise SystemExit("readlink bridge anchor missing")
 i = i.replace(bridge_anchor, bridge_replace, 1)
+
+time_anchor = '''                // arch_prctl has no AArch64 syscall-table counterpart. Handle
+                // the x86_64 FS bootstrap in the interpreter itself.
+                if (guest_nr == 158) {
+'''
+time_replace = '''                // time(2) has no AArch64 syscall-table counterpart.
+                if (guest_nr == 201) {
+                    time_t now = time(NULL);
+                    uint64_t out = (uint64_t)(int64_t)now;
+                    uint64_t addr = x86_64_get_reg(cpu, X86_64_RDI);
+                    if (addr && guest_write(cpu, addr, &out, sizeof(out)) < 0)
+                        out = (uint64_t)(int64_t)-X86_64_EFAULT;
+                    x86_64_set_rax(cpu, out);
+                    continue;
+                }
+
+                // arch_prctl has no AArch64 syscall-table counterpart. Handle
+                // the x86_64 FS bootstrap in the interpreter itself.
+                if (guest_nr == 158) {
+'''
+if time_anchor not in i:
+    raise SystemExit("time syscall anchor missing")
+i = i.replace(time_anchor, time_replace, 1)
 interp.write_text(i)
 
 test = Path("tests/x86_64/direct_guest_smoke.c")
