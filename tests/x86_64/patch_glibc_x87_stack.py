@@ -4,7 +4,7 @@ from pathlib import Path
 cpu_h = Path("emu/arch/x86_64/cpu.h")
 h = cpu_h.read_text()
 field_anchor = '''    union x86_64_xmm xmm[16];\n    union x86_64_xmm fp[32];\n'''
-field_insert = '''    union x86_64_xmm xmm[16];\n\n    // Minimal architectural x87 stack used by the direct x86_64 interpreter.\n    // Keep each register in raw 80-bit extended format so this stays correct\n    // on ARM64 hosts where C long double is not necessarily x87 extended.\n    uint8_t x87_st[8][10];\n    uint8_t x87_top;\n    uint8_t x87_valid;\n\n    union x86_64_xmm fp[32];\n'''
+field_insert = '''    union x86_64_xmm xmm[16];\n\n    // Minimal architectural x87 stack used by the direct x86_64 interpreter.\n    // Keep each register in raw 80-bit extended format so this stays correct\n    // on ARM64 hosts where C long double is not necessarily x87 extended.\n    uint8_t x87_st[8][10];\n    uint8_t x87_top;\n    uint8_t x87_valid;\n    uint16_t x87_control;\n    uint8_t x87_control_valid;\n\n    union x86_64_xmm fp[32];\n'''
 if field_anchor not in h:
     raise SystemExit("x87 cpu-state anchor missing")
 h = h.replace(field_anchor, field_insert, 1)
@@ -85,6 +85,27 @@ dispatch = r'''        // Minimal x87 raw-stack transport. Modern BDS still reac
         if (op == 0xd9) {
             uint8_t b;
             if (fetch_u8(cpu, ip + 1, &b) < 0) goto gpf;
+            unsigned mod = b >> 6;
+            unsigned group_raw = (b >> 3) & 7;
+            if (mod != 3 && (group_raw == 5 || group_raw == 7)) {
+                struct rm_operand rm;
+                unsigned group;
+                addr_t next;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 1, 2, &rm, &group, &next) < 0) goto gpf;
+                if (rm.is_reg) goto undefined;
+                if ((group & 7) == 5) { // FLDCW m16
+                    uint16_t control;
+                    if (guest_read(cpu, rm.addr, &control, sizeof(control)) < 0) goto gpf;
+                    cpu->x87_control = control;
+                    cpu->x87_control_valid = 1;
+                } else { // FNSTCW m16
+                    uint16_t control = cpu->x87_control_valid ? cpu->x87_control : 0x037f;
+                    if (guest_write(cpu, rm.addr, &control, sizeof(control)) < 0) goto gpf;
+                }
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
             if (b >= 0xc0 && b <= 0xc7) { // FLD ST(i)
                 unsigned i = b & 7;
                 if (!x87_is_valid(cpu, i)) goto undefined;
@@ -133,7 +154,30 @@ interp.write_text(s)
 test = Path("tests/x86_64/direct_guest_smoke.c")
 t = test.read_text()
 func_anchor = '''static void test_write_exit(void) {\n'''
-func = r'''static void test_x87_m80_roundtrip(void) {
+func = r'''static void test_x87_control_word(void) {
+    memset(memory, 0, sizeof(memory));
+    const uint8_t program[] = {
+        0xd9,0xac,0x24,0x80,0x00,0x00,0x00,
+        0xd9,0x7c,0x24,0x16,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x48,0x31,0xff,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    cpu.sp = BASE + 0x200;
+    const uint16_t control = 0x027f;
+    memcpy(&memory[0x280], &control, sizeof(control));
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL);
+    uint16_t stored = 0;
+    memcpy(&stored, &memory[0x216], sizeof(stored));
+    assert(stored == control);
+    puts("DIRECT X86_64 X87 CONTROL: PASS");
+}
+
+static void test_x87_m80_roundtrip(void) {
     memset(memory, 0, sizeof(memory));
     const uint8_t program[] = {
         0xdb,0xac,0x24,0x90,0x00,0x00,0x00, // fld tbyte ptr [rsp+0x90]
@@ -165,7 +209,7 @@ t = t.replace(func_anchor, func + func_anchor, 1)
 main_anchor = '''    test_write_exit();\n'''
 if main_anchor not in t:
     raise SystemExit("x87 direct-smoke main anchor missing")
-t = t.replace(main_anchor, '''    test_x87_m80_roundtrip();\n    test_write_exit();\n''', 1)
+t = t.replace(main_anchor, '''    test_x87_control_word();\n    test_x87_m80_roundtrip();\n    test_write_exit();\n''', 1)
 test.write_text(t)
 
 print("patched x86_64 raw x87 stack with FLD/FSTP m80 and stack transports")
