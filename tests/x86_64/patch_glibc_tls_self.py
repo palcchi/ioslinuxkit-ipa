@@ -19,5 +19,24 @@ new = """        case ARCH_SET_FS:
 """
 if old not in s:
     raise SystemExit("ARCH_SET_FS anchor missing")
-path.write_text(s.replace(old, new, 1))
-print("patched x86_64 ARCH_SET_FS with a canonical 64-bit TCB self pointer")
+s = s.replace(old, new, 1)
+
+old_read = """            } else {
+                if (rm_read(cpu, &rm, move_bits, &value) < 0) goto gpf;
+                write_reg_bits(cpu, reg, value, move_bits);
+            }
+"""
+new_read = """            } else {
+                if (rm_read(cpu, &rm, move_bits, &value) < 0) goto gpf;
+                // The x86_64 TCB head is architecturally self-referential.
+                // Normalize FS:0 at the read boundary so legacy shared-kernel
+                // clone setup cannot expose an i386-width value to glibc.
+                if (fs_prefix && move_bits == 64 && rm.addr == cpu->tls_ptr)
+                    value = cpu->tls_ptr;
+                write_reg_bits(cpu, reg, value, move_bits);
+            }
+"""
+if old_read not in s:
+    raise SystemExit("MOV TLS read anchor missing")
+path.write_text(s.replace(old_read, new_read, 1))
+print("patched x86_64 FS TLS self-pointer reads")
