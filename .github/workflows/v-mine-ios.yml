@@ -7,6 +7,7 @@ on:
       - x86_64-guest
     paths:
       - 'app/**'
+      - 'tests/x86_64/**'
       - 'V-MINE.xcodeproj/**'
       - '.github/workflows/v-mine-ios.yml'
 
