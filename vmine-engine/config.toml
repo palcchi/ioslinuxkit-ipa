@@ -1,0 +1,23 @@
+[Network]
+  Address = ":19132"
+
+[Server]
+  Name = "V-MINE Server"
+  AuthEnabled = true
+  DisableJoinQuitMessages = false
+  MuteEmoteChat = false
+
+[World]
+  Folder = "world"
+  SaveData = true
+
+[Players]
+  MaxCount = 10
+  MaximumChunkRadius = 6
+  SaveData = true
+  Folder = "players"
+
+[Resources]
+  AutoBuildPack = false
+  Folder = "resources"
+  Required = false

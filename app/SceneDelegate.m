@@ -57,6 +57,7 @@ static UIButton *VMineButton(NSString *title, NSString *symbol, BOOL primary) {
 @property (nonatomic, copy) NSString *installedVersion;
 @property (nonatomic, strong) NSMutableArray<NSString *> *consoleLines;
 @property (nonatomic, strong) NSMutableString *terminalBuffer;
+@property (nonatomic, strong) NSArray<NSString *> *onlinePlayers;
 + (instancetype)shared;
 - (void)appendLog:(NSString *)line;
 - (void)consumeTerminalData:(NSData *)data;
@@ -80,6 +81,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
                               @"Dragonfly is bundled. Press Start Server when ready.",
                               @"Files: On My iPhone/iPad > V-MINE > V-MINE Server", nil];
         state.terminalBuffer = [NSMutableString string];
+        state.onlinePlayers = @[];
         [[NSNotificationCenter defaultCenter] addObserver:state
                                                  selector:@selector(terminalOutput:)
                                                      name:VMineTerminalOutputNotification
@@ -129,15 +131,19 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
             self.installing = NO;
             self.installProgress = 0;
             self.statusText = @"Install failed";
-        } else if ([line containsString:@"IPv4 supported"] && [line containsString:@"19132"]) {
+        } else if ([line containsString:@"VMINE_SERVER_READY:19132"] || ([line containsString:@"IPv4 supported"] && [line containsString:@"19132"])) {
             self.running = YES;
             self.statusText = @"Online";
         } else if ([line containsString:@"Quit correctly"] || [line containsString:@"VMINE_SERVER_STOPPED"]) {
             self.running = NO;
             self.statusText = @"Offline";
-        } else if ([line containsString:@"VMINE_DRAGONFLY_STARTED"]) {
-            self.running = YES;
-            self.statusText = @"Online";
+        } else if ([line containsString:@"VMINE_SERVER_ERROR:"]) {
+            self.running = NO;
+            self.statusText = @"Start failed";
+        } else if ([line hasPrefix:@"VMINE_PLAYERS:"]) {
+            NSData *json = [[line substringFromIndex:@"VMINE_PLAYERS:".length] dataUsingEncoding:NSUTF8StringEncoding];
+            NSArray *players = [NSJSONSerialization JSONObjectWithData:json options:0 error:nil];
+            if ([players isKindOfClass:NSArray.class]) self.onlinePlayers = players;
         }
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:VMineStateDidChangeNotification object:self];
@@ -381,7 +387,7 @@ static BOOL VMineSendInterrupt(void) {
     VMineState *state = VMineState.shared;
     state.statusText = @"Starting";
     [state appendLog:@"Starting Dragonfly on UDP port 19132..."];
-    NSString *command = @"mkdir -p /opt/vmine/server/world /opt/vmine/server/players /opt/vmine/server/resources; test -f /opt/vmine/server/config.toml || /bin/busybox cp /usr/local/share/vmine-dragonfly-config.toml /opt/vmine/server/config.toml; cd /opt/vmine/server && echo VMINE_DRAGONFLY_STARTED && /usr/local/bin/vmine-dragonfly; echo VMINE_SERVER_STOPPED";
+    NSString *command = @"mkdir -p /opt/vmine/server/world /opt/vmine/server/players /opt/vmine/server/resources; test -f /opt/vmine/server/config.toml || /bin/busybox cp /usr/local/share/vmine-dragonfly-config.toml /opt/vmine/server/config.toml; /bin/busybox sed -i 's/MaximumChunkRadius = 32/MaximumChunkRadius = 6/; s/AutoBuildPack = true/AutoBuildPack = false/; s/Required = true/Required = false/' /opt/vmine/server/config.toml; cd /opt/vmine/server && /usr/local/bin/vmine-dragonfly; echo VMINE_SERVER_STOPPED";
     if (!VMineSendCommand(command)) {
         state.statusText = @"Engine unavailable";
         [state appendLog:@"Start failed: the V-MINE terminal engine is not ready."];
@@ -528,6 +534,16 @@ static BOOL VMineSendInterrupt(void) {
     self.emptyText = @"No players online";
     [super viewDidLoad];
     self.title = @"Players";
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshPlayers) name:VMineStateDidChangeNotification object:nil];
+    if (VMineState.shared.running) VMineSendCommand(@"list");
+}
+- (void)refreshPlayers {
+    NSMutableArray *rows = [NSMutableArray array];
+    for (NSString *name in VMineState.shared.onlinePlayers) {
+        [rows addObject:@{@"title": name, @"detail": @"Online", @"symbol": @"person.crop.circle.fill"}];
+    }
+    self.items = rows;
+    [self.tableView reloadData];
 }
 @end
 
@@ -594,10 +610,11 @@ static BOOL VMineSendInterrupt(void) {
 @implementation VMineSettingsViewController
 - (void)viewDidLoad {
     self.items = @[
-        @{@"title": @"Server Name", @"detail": @"Dragonfly Server", @"symbol": @"server.rack"},
+        @{@"title": @"Server Name", @"detail": @"V-MINE Server", @"symbol": @"server.rack"},
         @{@"title": @"Game Mode", @"detail": @"Survival", @"symbol": @"gamecontroller"},
         @{@"title": @"Difficulty", @"detail": @"Normal", @"symbol": @"dial.medium"},
-        @{@"title": @"Max Players", @"detail": @"20", @"symbol": @"person.2"},
+        @{@"title": @"Max Players", @"detail": @"10", @"symbol": @"person.2"},
+        @{@"title": @"Chunk Radius", @"detail": @"6 (Optimized)", @"symbol": @"square.grid.3x3"},
         @{@"title": @"Port", @"detail": @"19132", @"symbol": @"network"},
         @{@"title": @"Engine", @"detail": @"Dragonfly bundled", @"symbol": @"checkmark.circle"}
     ];
@@ -606,7 +623,7 @@ static BOOL VMineSendInterrupt(void) {
 }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.row == 5) {
+    if (indexPath.row == 6) {
         [self.navigationController pushViewController:[VMineUpdatesViewController new] animated:YES];
     }
 }

@@ -24,6 +24,11 @@ jobs:
           ref: master
           path: dragonfly
 
+      - name: Checkout V-MINE engine wrapper
+        uses: actions/checkout@v4
+        with:
+          path: vmine-source
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -41,9 +46,10 @@ jobs:
           mkdir -p rootfs/opt/vmine/server rootfs/opt/vmine/data rootfs/opt/vmine/backups rootfs/ish
           (
             cd dragonfly
+	          cp ../vmine-source/vmine-engine/main.go ./main.go
             CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../rootfs/usr/local/bin/vmine-dragonfly .
           )
-          cp dragonfly/config.toml rootfs/usr/local/share/vmine-dragonfly-config.toml
+          cp vmine-source/vmine-engine/config.toml rootfs/usr/local/share/vmine-dragonfly-config.toml
           chmod 755 rootfs/usr/local/bin/vmine-dragonfly
           test -x rootfs/usr/local/bin/vmine-dragonfly
           tar --numeric-owner -C rootfs -czf vmine-alpine-arm64.tar.gz .

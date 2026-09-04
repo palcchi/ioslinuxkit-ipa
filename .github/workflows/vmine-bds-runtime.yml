@@ -44,9 +44,10 @@ jobs:
           cp /etc/resolv.conf dragonfly-root/etc/resolv.conf
           (
             cd dragonfly
+	          cp ../vmine-engine/main.go ./main.go
             CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../dragonfly-root/vmine-dragonfly .
           )
-          cp dragonfly/config.toml dragonfly-root/config.toml
+          cp vmine-engine/config.toml dragonfly-root/config.toml
           chmod 755 dragonfly-root/vmine-dragonfly
           tar --numeric-owner -C dragonfly-root -cf dragonfly-rootfs.tar .
           ./build-arm64/tools/fakefsify dragonfly-rootfs.tar dragonfly-fakefs
@@ -55,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          gtimeout 600 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
+          { sleep 3; echo help; echo list; sleep 3; echo stop; } | gtimeout 600 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
           vmine_pid=$!
           set -e
           for attempt in $(seq 1 120); do
@@ -74,6 +75,8 @@ jobs:
           tail -n 300 dragonfly.log
           echo "DRAGONFLY_RUNTIME_RC=$runtime_rc"
           test -f dragonfly-startup.ok
+          grep -q 'Commands: help, stop, list' dragonfly.log
+          grep -q 'VMINE_PLAYERS:' dragonfly.log
           echo 'V-MINE DRAGONFLY STARTUP: UDP 19132 OPEN'
 
       - name: Upload Dragonfly logs
