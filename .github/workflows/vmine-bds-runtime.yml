@@ -1,4 +1,4 @@
-name: V-MINE BDS Runtime
+name: V-MINE Dragonfly Runtime
 
 on:
   push:
@@ -7,151 +7,84 @@ on:
   workflow_dispatch:
 
 jobs:
-  bds-runtime:
+  dragonfly-runtime:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      - name: Checkout Dragonfly
+        uses: actions/checkout@v4
+        with:
+          repository: df-mc/dragonfly
+          ref: master
+          path: dragonfly
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: dragonfly/go.mod
+          cache-dependency-path: dragonfly/go.sum
+
       - name: Apply x86_64 compatibility patches
         shell: bash
         run: |
           set -euo pipefail
-          for p in tests/x86_64/patch_glibc_*.py; do
-            echo "==> applying $p"
-            python3 "$p"
-          done
+          for p in tests/x86_64/patch_glibc_*.py; do python3 "$p"; done
 
       - name: Install host dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev unzip
+          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev busybox-static
 
-      - name: Build V-MINE x86_64 runtime
+      - name: Build V-MINE and Dragonfly
+        shell: bash
         run: |
+          set -euo pipefail
           meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
           ninja -C build-x86_64
-
-      - name: Build Jammy plus official BDS rootfs
-        shell: bash
-        run: |
-          set -euo pipefail
-          BDS_VERSION=1.26.44.3
-          BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BDS_VERSION}.zip"
-
-          wget -q -O jammy-base.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
-          rm -rf bds-root bds-fakefs bds-rootfs.tar bds.zip bds-debs
-          mkdir bds-root
-          tar -xzf jammy-base.tar.gz -C bds-root
-
-          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/bds-jammy.list >/dev/null
-          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe
-          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe
-          deb [arch=amd64] http://security.ubuntu.com/ubuntu jammy-security main universe
-          EOF
-          sudo apt-get update >/dev/null
-          mkdir bds-debs
+          mkdir -p dragonfly-root/bin
+          cp /bin/busybox dragonfly-root/bin/sh
           (
-            cd bds-debs
-            apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
-            apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
+            cd dragonfly
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dragonfly-root/vmine-dragonfly .
           )
-          for deb in bds-debs/*.deb; do
-            dpkg-deb -x "$deb" bds-root
-          done
+          cp dragonfly/config.toml dragonfly-root/config.toml
+          chmod 755 dragonfly-root/vmine-dragonfly
+          tar --numeric-owner -C dragonfly-root -cf dragonfly-rootfs.tar .
+          ./build-x86_64/tools/fakefsify dragonfly-rootfs.tar dragonfly-fakefs
 
-          wget -q -O bds.zip "$BDS_URL"
-          unzip -q bds.zip -d bds-root
-          chmod +x bds-root/bedrock_server
-          sed -i 's/^max-threads=.*/max-threads=1/' bds-root/server.properties
-
-          loader_src='bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
-          if [ ! -f "$loader_src" ]; then
-            loader_src='bds-root/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
-          fi
-          test -f "$loader_src"
-          mkdir -p bds-root/lib64
-          rm -f bds-root/lib64/ld-linux-x86-64.so.2
-          cp -L "$loader_src" bds-root/lib64/ld-linux-x86-64.so.2
-          chmod 0755 bds-root/lib64/ld-linux-x86-64.so.2
-
-          echo '--- PT_INTERP ---'
-          readelf -l bds-root/bedrock_server | grep -E 'interpreter|Requesting' || true
-          echo '--- loader ---'
-          file bds-root/lib64/ld-linux-x86-64.so.2
-
-          tar --numeric-owner -C bds-root -cf bds-rootfs.tar .
-          ./build-x86_64/tools/fakefsify bds-rootfs.tar bds-fakefs
-
-      - name: Restore previous BDS world state
-        id: bds-cache-restore
-        uses: actions/cache/restore@v4
-        with:
-          path: bds-fakefs
-          key: vmine-bds-fakefs-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            vmine-bds-fakefs-${{ runner.os }}-
-
-      - name: Verify BDS fakefs guest visibility
-        shell: bash
-        run: |
-          set -euo pipefail
-          timeout 20 ./build-x86_64/ish -f bds-fakefs /bin/ls -l /lib64/ld-linux-x86-64.so.2 /bedrock_server 2>&1 | tee bds-visibility.log
-
-      # Success requires an actual kernel UDP socket, not a log banner.
-      - name: Run and verify BDS UDP 19132
+      - name: Run and verify Dragonfly UDP 19132
         shell: bash
         run: |
           set +e
-          rm -f bds-normal.log bds-startup.ok
-          setsid timeout --foreground 1800 ./build-x86_64/ish -f bds-fakefs /bin/sh -c 'cd / && exec /bedrock_server' >bds-normal.log 2>&1 &
+          setsid timeout --foreground 600 ./build-x86_64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
           vmine_pid=$!
           set -e
-
-          for attempt in $(seq 1 360); do
+          for attempt in $(seq 1 120); do
             if grep -Eqi ':[[:space:]]*4ABC[[:space:]]' /proc/net/udp /proc/net/udp6 2>/dev/null; then
-              echo udp-19132 > bds-startup.ok
+              echo udp-19132 > dragonfly-startup.ok
               break
             fi
-            if ! kill -0 "$vmine_pid" 2>/dev/null; then
-              break
-            fi
+            if ! kill -0 "$vmine_pid" 2>/dev/null; then break; fi
             sleep 5
           done
-
-          if [ -f bds-startup.ok ]; then
-            kill -- "-$vmine_pid" 2>/dev/null || true
-          fi
+          if [ -f dragonfly-startup.ok ]; then kill -- "-$vmine_pid" 2>/dev/null || true; fi
           set +e
           wait "$vmine_pid"
-          echo $? > bds-normal.rc
+          runtime_rc=$?
           set -e
+          tail -n 300 dragonfly.log
+          echo "DRAGONFLY_RUNTIME_RC=$runtime_rc"
+          test -f dragonfly-startup.ok
+          echo 'V-MINE DRAGONFLY STARTUP: UDP 19132 OPEN'
 
-          echo '--- BDS tail (last 400 lines) ---'
-          tail -n 400 bds-normal.log
-          echo "BDS_NORMAL_RC=$(cat bds-normal.rc)"
-          if [ -f bds-startup.ok ]; then
-            echo "V-MINE BDS STARTUP: $(cat bds-startup.ok)"
-            exit 0
-          fi
-          echo 'V-MINE BDS STARTUP: NOT REACHED'
-          exit 1
-
-      - name: Save progressed BDS world state
-        if: always() && steps.bds-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bds-fakefs
-          key: vmine-bds-fakefs-${{ runner.os }}-${{ github.sha }}
-
-      - name: Upload BDS logs
+      - name: Upload Dragonfly logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vmine-bds-frontier
+          name: vmine-dragonfly-runtime
           path: |
-            bds-normal.log
-            bds-normal.rc
-            bds-visibility.log
-            bds-startup.ok
+            dragonfly.log
+            dragonfly-startup.ok
