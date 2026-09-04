@@ -14,6 +14,8 @@
 
 extern struct tty_driver ios_pty_driver;
 
+NSString *const VMineTerminalOutputNotification = @"VMineTerminalOutputNotification";
+
 #if !ISH_LINUX
 typedef struct tty *tty_t;
 #else
@@ -260,6 +262,14 @@ static NSMapTable<NSUUID *, Terminal *> *terminalsByUUID;
 }
 
 - (int)sendOutput:(const void *)buf length:(int)len {
+    if (len > 0) {
+        NSData *output = [NSData dataWithBytes:buf length:(NSUInteger)len];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:VMineTerminalOutputNotification
+                                                                object:self
+                                                              userInfo:@{@"data": output}];
+        });
+    }
 #if !ISH_LINUX
     lock(&_dataLock);
     if (!NSThread.isMainThread) {

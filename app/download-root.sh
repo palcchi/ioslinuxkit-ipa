@@ -1,14 +1,18 @@
 #!/bin/sh
 set -eu
 
-: "${ROOTFS_URL:?ROOTFS_URL is required}"
 : "${BUILT_PRODUCTS_DIR:?BUILT_PRODUCTS_DIR is required}"
 : "${CONTENTS_FOLDER_PATH:?CONTENTS_FOLDER_PATH is required}"
 
 rootfs_arch="${ROOTFS_ARCH:-aarch64}"
 output="$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/root.tar.gz"
 
-curl -L "https://$ROOTFS_URL" -o "$output"
+if [ -n "${ROOTFS_LOCAL_PATH:-}" ]; then
+    cp "$ROOTFS_LOCAL_PATH" "$output"
+else
+    : "${ROOTFS_URL:?ROOTFS_URL is required}"
+    curl -L "https://$ROOTFS_URL" -o "$output"
+fi
 
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/linuxkit-root.XXXXXX")"
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -19,6 +23,8 @@ description="$(file "$tmpdir/bin/busybox")"
 case "$rootfs_arch:$description" in
     aarch64:*"ARM aarch64"*) ;;
     arm64:*"ARM aarch64"*) ;;
+    x86_64:*"x86-64"*) ;;
+    amd64:*"x86-64"*) ;;
     *)
         echo "Refusing to package non-$rootfs_arch rootfs: $description" >&2
         exit 1

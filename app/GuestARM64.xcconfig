@@ -1,16 +1,16 @@
-// ARM64 Guest Architecture Configuration
-// Include this in your target's xcconfig to build with ARM64 guest support
+// V-MINE keeps the historical target filename, but the product runs an
+// x86_64 Linux guest so Mojang's official BDS binary can execute on ARM64 iOS.
 
 // Define the guest architecture
-GUEST_ARCH = arm64
+GUEST_ARCH = x86_64
 
-// Add the GUEST_ARM64 preprocessor macro for both meson and Xcode builds.
-ISH_GUEST_DEFINES = GUEST_ARM64=1
-GCC_PREPROCESSOR_DEFINITIONS = GUEST_ARM64=1 DEBUG=1
+// Add the x86_64 guest macro for both Meson and Xcode builds.
+ISH_GUEST_DEFINES = GUEST_X86_64=1
+GCC_PREPROCESSOR_DEFINITIONS = GUEST_X86_64=1 DEBUG=1
 
-// Meson options for ARM64 guest
-MESON_GUEST_OPTION = -Dguest_arch=arm64
+// Meson option for the x86_64 guest interpreter.
+MESON_GUEST_OPTION = -Dguest_arch=x86_64
 
-// ARM64 rootfs URL (Alpine 3.24 aarch64 minirootfs)
-ROOTFS_URL = dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.0-aarch64.tar.gz
-ROOTFS_ARCH = aarch64
+// CI supplies a prepared Jammy amd64 rootfs through ROOTFS_LOCAL_PATH.
+ROOTFS_URL = cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
+ROOTFS_ARCH = x86_64

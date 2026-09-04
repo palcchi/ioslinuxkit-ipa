@@ -11,7 +11,41 @@ on:
       - '.github/workflows/v-mine-ios.yml'
 
 jobs:
+  prepare-bds-rootfs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Build Jammy amd64 runtime rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -q -O jammy-base.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
+          mkdir rootfs rootfs-debs
+          tar -xzf jammy-base.tar.gz -C rootfs
+          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/vmine-jammy.list >/dev/null
+          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe
+          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe
+          deb [arch=amd64] http://security.ubuntu.com/ubuntu jammy-security main universe
+          EOF
+          sudo apt-get update >/dev/null
+          (
+            cd rootfs-debs
+            apt-get download busybox-static:amd64
+            apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
+            apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
+          )
+          for deb in rootfs-debs/*.deb; do dpkg-deb -x "$deb" rootfs; done
+          test -x rootfs/bin/busybox
+          mkdir -p rootfs/opt/vmine/server rootfs/opt/vmine/data rootfs/opt/vmine/backups rootfs/ish
+          tar --numeric-owner -C rootfs -czf vmine-jammy-amd64.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vmine-jammy-amd64-rootfs
+          path: vmine-jammy-amd64.tar.gz
+
   build-ios:
+    needs: prepare-bds-rootfs
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -28,6 +62,18 @@ jobs:
       - name: Install build tools
         run: brew install meson ninja
 
+      - name: Download BDS-ready amd64 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: vmine-jammy-amd64-rootfs
+          path: prepared-rootfs
+
+      - name: Apply verified x86_64 BDS compatibility patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in tests/x86_64/patch_glibc_*.py; do python3 "$p"; done
+
       - name: Build native V-MINE shell
         run: |
           set -o pipefail
@@ -39,6 +85,7 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build-vmine \
+            ROOTFS_LOCAL_PATH="$PWD/prepared-rootfs/vmine-jammy-amd64.tar.gz" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee xcode-build.log

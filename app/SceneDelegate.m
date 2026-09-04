@@ -51,11 +51,14 @@ static UIButton *VMineButton(NSString *title, NSString *symbol, BOOL primary) {
 
 @interface VMineState : NSObject
 @property (nonatomic) BOOL running;
+@property (nonatomic) BOOL installing;
 @property (nonatomic, copy) NSString *statusText;
 @property (nonatomic, copy) NSString *installedVersion;
 @property (nonatomic, strong) NSMutableArray<NSString *> *consoleLines;
+@property (nonatomic, strong) NSMutableString *terminalBuffer;
 + (instancetype)shared;
 - (void)appendLog:(NSString *)line;
+- (void)consumeTerminalData:(NSData *)data;
 @end
 
 static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNotification";
@@ -67,11 +70,17 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     dispatch_once(&onceToken, ^{
         state = [VMineState new];
         state.running = NO;
+        state.installing = NO;
         state.statusText = @"Offline";
         state.installedVersion = [[NSUserDefaults standardUserDefaults] stringForKey:@"VMineInstalledBDSVersion"] ?: @"Not installed";
         state.consoleLines = [NSMutableArray arrayWithObjects:
                               @"V-MINE runtime ready.",
                               @"Install the official Bedrock server from Updates before starting.", nil];
+        state.terminalBuffer = [NSMutableString string];
+        [[NSNotificationCenter defaultCenter] addObserver:state
+                                                 selector:@selector(terminalOutput:)
+                                                     name:VMineTerminalOutputNotification
+                                                   object:nil];
     });
     return state;
 }
@@ -83,7 +92,51 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:VMineStateDidChangeNotification object:self];
 }
+- (void)terminalOutput:(NSNotification *)notification {
+    [self consumeTerminalData:notification.userInfo[@"data"]];
+}
+- (void)consumeTerminalData:(NSData *)data {
+    if (data.length == 0) return;
+    NSString *chunk = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (chunk.length == 0) return;
+    [self.terminalBuffer appendString:chunk];
+    NSArray<NSString *> *parts = [self.terminalBuffer componentsSeparatedByString:@"\n"];
+    self.terminalBuffer = [parts.lastObject mutableCopy];
+    for (NSUInteger i = 0; i + 1 < parts.count; i++) {
+        NSString *line = [parts[i] stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet];
+        if (line.length == 0) continue;
+        [self appendLog:line];
+        if ([line containsString:@"VMINE_INSTALL_OK:"]) {
+            NSString *version = [[line componentsSeparatedByString:@"VMINE_INSTALL_OK:"] lastObject];
+            version = [version stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            self.installedVersion = version.length ? version : @"Installed";
+            self.installing = NO;
+            self.statusText = @"Offline";
+            [NSUserDefaults.standardUserDefaults setObject:self.installedVersion forKey:@"VMineInstalledBDSVersion"];
+        } else if ([line containsString:@"VMINE_INSTALL_FAILED"]) {
+            self.installing = NO;
+            self.statusText = @"Install failed";
+        } else if ([line containsString:@"IPv4 supported"] && [line containsString:@"19132"]) {
+            self.running = YES;
+            self.statusText = @"Online";
+        } else if ([line containsString:@"Quit correctly"] || [line containsString:@"VMINE_SERVER_STOPPED"]) {
+            self.running = NO;
+            self.statusText = @"Offline";
+        }
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:VMineStateDidChangeNotification object:self];
+}
 @end
+
+static __weak TerminalViewController *VMineEngineController;
+
+static BOOL VMineSendCommand(NSString *command) {
+    Terminal *terminal = VMineEngineController.terminal;
+    if (terminal == nil) return NO;
+    NSString *line = [command stringByAppendingString:@"\n"];
+    [terminal sendInput:[line dataUsingEncoding:NSUTF8StringEncoding]];
+    return YES;
+}
 
 @interface VMineBaseViewController : UIViewController
 - (UIView *)card;
@@ -297,6 +350,8 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     self.versionValue.text = state.installedVersion;
     self.stopButton.enabled = state.running;
     self.stopButton.alpha = state.running ? 1.0 : 0.5;
+    self.startButton.enabled = !state.running && !state.installing;
+    self.startButton.alpha = self.startButton.enabled ? 1.0 : 0.5;
 }
 - (void)startTapped {
     VMineState *state = VMineState.shared;
@@ -307,10 +362,18 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         [self presentViewController:alert animated:YES completion:nil];
         return;
     }
-    [state appendLog:@"Start requested. V-MINE runtime bridge is preparing the server process."];
+    state.statusText = @"Starting";
+    [state appendLog:@"Starting Bedrock Dedicated Server on UDP port 19132..."];
+    if (!VMineSendCommand(@"cd /opt/vmine/server && LD_LIBRARY_PATH=. ./bedrock_server; echo VMINE_SERVER_STOPPED")) {
+        state.statusText = @"Engine unavailable";
+        [state appendLog:@"Start failed: the V-MINE terminal engine is not ready."];
+    }
 }
 - (void)stopTapped {
-    [VMineState.shared appendLog:@"Stop requested."];
+    [VMineState.shared appendLog:@"Stopping Bedrock Dedicated Server..."];
+    if (!VMineSendCommand(@"stop")) {
+        [VMineState.shared appendLog:@"Stop failed: the V-MINE terminal engine is not ready."];
+    }
 }
 @end
 
@@ -370,6 +433,9 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     NSString *command = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (command.length == 0) return NO;
     [VMineState.shared appendLog:[NSString stringWithFormat:@"> %@", command]];
+    if (!VMineSendCommand(command)) {
+        [VMineState.shared appendLog:@"Command failed: the V-MINE terminal engine is not ready."];
+    }
     textField.text = @"";
     return NO;
 }
@@ -449,6 +515,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
 
 @interface VMineUpdatesViewController : VMineBaseViewController
 @property UILabel *installedLabel;
+@property UIButton *installButton;
 @end
 @implementation VMineUpdatesViewController
 - (void)viewDidLoad {
@@ -459,9 +526,9 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     UILabel *title = [self label:@"Official Bedrock Server" size:20 weight:UIFontWeightBold color:UIColor.whiteColor];
     UILabel *source = [self label:@"Source: Minecraft / Mojang" size:13 weight:UIFontWeightMedium color:VMineSecondary()];
     self.installedLabel = [self label:@"Installed: Not installed" size:15 weight:UIFontWeightMedium color:UIColor.whiteColor];
-    UIButton *check = VMineButton(@"Check for Updates", @"arrow.down.circle.fill", YES);
-    [check addTarget:self action:@selector(checkUpdates) forControlEvents:UIControlEventTouchUpInside];
-    [card addSubview:title]; [card addSubview:source]; [card addSubview:self.installedLabel]; [card addSubview:check];
+    self.installButton = VMineButton(@"Download & Install BDS", @"arrow.down.circle.fill", YES);
+    [self.installButton addTarget:self action:@selector(checkUpdates) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:title]; [card addSubview:source]; [card addSubview:self.installedLabel]; [card addSubview:self.installButton];
     [NSLayoutConstraint activateConstraints:@[
         [card.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20],
         [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
@@ -473,19 +540,32 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         [source.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
         [self.installedLabel.topAnchor constraintEqualToAnchor:source.bottomAnchor constant:22],
         [self.installedLabel.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
-        [check.topAnchor constraintEqualToAnchor:self.installedLabel.bottomAnchor constant:22],
-        [check.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
-        [check.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
-        [check.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
+        [self.installButton.topAnchor constraintEqualToAnchor:self.installedLabel.bottomAnchor constant:22],
+        [self.installButton.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [self.installButton.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.installButton.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
     ]];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refresh) name:VMineStateDidChangeNotification object:nil];
     [self refresh];
 }
-- (void)refresh { self.installedLabel.text = [NSString stringWithFormat:@"Installed: %@", VMineState.shared.installedVersion]; }
+- (void)refresh {
+    VMineState *state = VMineState.shared;
+    self.installedLabel.text = [NSString stringWithFormat:@"Installed: %@", state.installedVersion];
+    self.installButton.enabled = !state.installing && !state.running;
+    self.installButton.alpha = self.installButton.enabled ? 1.0 : 0.5;
+    [self.installButton setTitle:(state.installing ? @"Installing..." : @"Download & Install BDS") forState:UIControlStateNormal];
+}
 - (void)checkUpdates {
-    [VMineState.shared appendLog:@"Update check requested from official Minecraft source."];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Update Manager" message:@"The native updater shell is ready. Network download and atomic engine replacement are being wired to the BDS runtime layer." preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    VMineState *state = VMineState.shared;
+    state.installing = YES;
+    state.statusText = @"Installing";
+    [state appendLog:@"Downloading official Bedrock Dedicated Server 1.26.44.3..."];
+    NSString *command = @"mkdir -p /opt/vmine/server /opt/vmine/data && cd /opt/vmine/server && /bin/busybox wget -q -O /tmp/vmine-bds.zip 'https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.44.3.zip' && /bin/busybox unzip -o /tmp/vmine-bds.zip -d /opt/vmine/server && chmod +x /opt/vmine/server/bedrock_server && rm -f /tmp/vmine-bds.zip && echo VMINE_INSTALL_OK:1.26.44.3 || echo VMINE_INSTALL_FAILED";
+    if (!VMineSendCommand(command)) {
+        state.installing = NO;
+        state.statusText = @"Engine unavailable";
+        [state appendLog:@"Install failed: the V-MINE terminal engine is not ready."];
+    }
 }
 @end
 
@@ -664,6 +744,11 @@ static NSString *const TerminalUUID = @"TerminalUUID";
     if ([self.window.rootViewController isKindOfClass:TerminalViewController.class]) {
         self.engineTerminalViewController = (TerminalViewController *)self.window.rootViewController;
         self.engineTerminalViewController.sceneSession = session;
+        VMineEngineController = self.engineTerminalViewController;
+        NSString *savedUUID = session.stateRestorationActivity.userInfo[TerminalUUID];
+        NSUUID *uuid = savedUUID.length ? [[NSUUID alloc] initWithUUIDString:savedUUID] : nil;
+        if (uuid != nil) [self.engineTerminalViewController reconnectSessionFromTerminalUUID:uuid];
+        else [self.engineTerminalViewController startNewSession];
     }
 
     UIViewController *root;

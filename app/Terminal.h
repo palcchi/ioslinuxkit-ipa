@@ -8,6 +8,8 @@
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 
+extern NSString *const VMineTerminalOutputNotification;
+
 struct tty;
 
 @interface Terminal : NSObject
