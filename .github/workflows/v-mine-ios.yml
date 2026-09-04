@@ -12,10 +12,23 @@ on:
       - '.github/workflows/v-mine-ios.yml'
 
 jobs:
-  prepare-bds-rootfs:
+  prepare-dragonfly-rootfs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Checkout Dragonfly
+        uses: actions/checkout@v4
+        with:
+          repository: df-mc/dragonfly
+          ref: master
+          path: dragonfly
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: dragonfly/go.mod
+          cache-dependency-path: dragonfly/go.sum
+
       - name: Build Jammy amd64 runtime rootfs
         shell: bash
         run: |
@@ -44,15 +57,22 @@ jobs:
           fi
           test -x rootfs/bin/busybox
           mkdir -p rootfs/opt/vmine/server rootfs/opt/vmine/data rootfs/opt/vmine/backups rootfs/ish
+          (
+            cd dragonfly
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../rootfs/usr/local/bin/vmine-dragonfly .
+          )
+          cp dragonfly/config.toml rootfs/usr/local/share/vmine-dragonfly-config.toml
+          chmod 755 rootfs/usr/local/bin/vmine-dragonfly
+          test -x rootfs/usr/local/bin/vmine-dragonfly
           tar --numeric-owner -C rootfs -czf vmine-jammy-amd64.tar.gz .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vmine-jammy-amd64-rootfs
+          name: vmine-dragonfly-amd64-rootfs
           path: vmine-jammy-amd64.tar.gz
 
   build-ios:
-    needs: prepare-bds-rootfs
+    needs: prepare-dragonfly-rootfs
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -69,13 +89,13 @@ jobs:
       - name: Install build tools
         run: brew install meson ninja llvm lld
 
-      - name: Download BDS-ready amd64 rootfs
+      - name: Download Dragonfly-ready amd64 rootfs
         uses: actions/download-artifact@v4
         with:
-          name: vmine-jammy-amd64-rootfs
+          name: vmine-dragonfly-amd64-rootfs
           path: prepared-rootfs
 
-      - name: Apply verified x86_64 BDS compatibility patches
+      - name: Apply verified x86_64 compatibility patches
         shell: bash
         run: |
           set -euo pipefail

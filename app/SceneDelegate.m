@@ -2,7 +2,7 @@
 //  SceneDelegate.m
 //  V-MINE
 //
-//  Native iOS/iPadOS shell for the Bedrock Dedicated Server runtime.
+//  Native iOS/iPadOS shell for the Dragonfly Bedrock server runtime.
 //
 
 #import "SceneDelegate.h"
@@ -74,10 +74,11 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         state.installing = NO;
         state.installProgress = 0;
         state.statusText = @"Offline";
-        state.installedVersion = [[NSUserDefaults standardUserDefaults] stringForKey:@"VMineInstalledBDSVersion"] ?: @"Not installed";
+        state.installedVersion = @"Dragonfly bundled";
         state.consoleLines = [NSMutableArray arrayWithObjects:
                               @"V-MINE runtime ready.",
-                              @"Install the official Bedrock server from Updates before starting.", nil];
+                              @"Dragonfly is bundled. Press Start Server when ready.",
+                              @"Files: On My iPhone/iPad > V-MINE > V-MINE Server", nil];
         state.terminalBuffer = [NSMutableString string];
         [[NSNotificationCenter defaultCenter] addObserver:state
                                                  selector:@selector(terminalOutput:)
@@ -109,12 +110,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         NSString *line = [parts[i] stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet];
         if (line.length == 0) continue;
         [self appendLog:line];
-        if ([line containsString:@"VMINE_DOWNLOAD_BEGIN"]) {
-            self.statusText = @"Downloading BDS";
-        } else if ([line containsString:@"VMINE_EXTRACT_BEGIN"]) {
-            self.installProgress = MAX(self.installProgress, 0.95);
-            self.statusText = @"Extracting BDS";
-        } else if (self.installing && [line containsString:@"%"] && [line rangeOfString:@"[0-9]{1,3}%" options:NSRegularExpressionSearch].location != NSNotFound) {
+        if (self.installing && [line containsString:@"%"] && [line rangeOfString:@"[0-9]{1,3}%" options:NSRegularExpressionSearch].location != NSNotFound) {
             NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"([0-9]{1,3})%" options:0 error:nil];
             NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
             if (match.numberOfRanges > 1) {
@@ -129,7 +125,6 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
             self.installing = NO;
             self.installProgress = 1;
             self.statusText = @"Offline";
-            [NSUserDefaults.standardUserDefaults setObject:self.installedVersion forKey:@"VMineInstalledBDSVersion"];
         } else if ([line containsString:@"VMINE_INSTALL_FAILED"]) {
             self.installing = NO;
             self.installProgress = 0;
@@ -140,6 +135,9 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         } else if ([line containsString:@"Quit correctly"] || [line containsString:@"VMINE_SERVER_STOPPED"]) {
             self.running = NO;
             self.statusText = @"Offline";
+        } else if ([line containsString:@"VMINE_DRAGONFLY_STARTED"]) {
+            self.running = YES;
+            self.statusText = @"Online";
         }
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:VMineStateDidChangeNotification object:self];
@@ -153,6 +151,14 @@ static BOOL VMineSendCommand(NSString *command) {
     if (terminal == nil) return NO;
     NSString *line = [command stringByAppendingString:@"\n"];
     [terminal sendInput:[line dataUsingEncoding:NSUTF8StringEncoding]];
+    return YES;
+}
+
+static BOOL VMineSendInterrupt(void) {
+    Terminal *terminal = VMineEngineController.terminal;
+    if (terminal == nil) return NO;
+    const unsigned char interrupt = 3;
+    [terminal sendInput:[NSData dataWithBytes:&interrupt length:1]];
     return YES;
 }
 
@@ -252,7 +258,7 @@ static BOOL VMineSendCommand(NSString *command) {
     self.statusDot.backgroundColor = VMineYellow();
     self.statusDot.layer.cornerRadius = 4;
     [hero addSubview:self.statusDot];
-    UILabel *versionCaption = [self label:@"BEDROCK VERSION" size:11 weight:UIFontWeightSemibold color:VMineSecondary()];
+    UILabel *versionCaption = [self label:@"SERVER ENGINE" size:11 weight:UIFontWeightSemibold color:VMineSecondary()];
     [hero addSubview:versionCaption];
     self.versionValue = [self label:@"Not installed" size:15 weight:UIFontWeightMedium color:UIColor.whiteColor];
     [hero addSubview:self.versionValue];
@@ -373,23 +379,17 @@ static BOOL VMineSendCommand(NSString *command) {
 }
 - (void)startTapped {
     VMineState *state = VMineState.shared;
-    if ([state.installedVersion isEqualToString:@"Not installed"]) {
-        [state appendLog:@"Start blocked: install the official Bedrock server from Updates first."];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Bedrock Server Not Installed" message:@"Open Updates and install the official Mojang Bedrock Dedicated Server first." preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
     state.statusText = @"Starting";
-    [state appendLog:@"Starting Bedrock Dedicated Server on UDP port 19132..."];
-    if (!VMineSendCommand(@"cd /opt/vmine/server && LD_LIBRARY_PATH=. ./bedrock_server; echo VMINE_SERVER_STOPPED")) {
+    [state appendLog:@"Starting Dragonfly on UDP port 19132..."];
+    NSString *command = @"mkdir -p /opt/vmine/server/world /opt/vmine/server/players /opt/vmine/server/resources; test -f /opt/vmine/server/config.toml || /bin/busybox cp /usr/local/share/vmine-dragonfly-config.toml /opt/vmine/server/config.toml; cd /opt/vmine/server && echo VMINE_DRAGONFLY_STARTED && /usr/local/bin/vmine-dragonfly; echo VMINE_SERVER_STOPPED";
+    if (!VMineSendCommand(command)) {
         state.statusText = @"Engine unavailable";
         [state appendLog:@"Start failed: the V-MINE terminal engine is not ready."];
     }
 }
 - (void)stopTapped {
-    [VMineState.shared appendLog:@"Stopping Bedrock Dedicated Server..."];
-    if (!VMineSendCommand(@"stop")) {
+    [VMineState.shared appendLog:@"Stopping Dragonfly..."];
+    if (!VMineSendInterrupt()) {
         [VMineState.shared appendLog:@"Stop failed: the V-MINE terminal engine is not ready."];
     }
 }
@@ -515,7 +515,7 @@ static BOOL VMineSendCommand(NSString *command) {
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(importWorld)];
 }
 - (void)importWorld {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import World" message:@"World import will use the iOS Files picker and store worlds separately from the updateable BDS engine." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import World" message:@"Place Dragonfly worlds in the V-MINE Server folder using the iOS Files app." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -543,8 +543,8 @@ static BOOL VMineSendCommand(NSString *command) {
     self.title = @"Updates";
     UIView *card = [self card];
     [self.view addSubview:card];
-    UILabel *title = [self label:@"Official Bedrock Server" size:20 weight:UIFontWeightBold color:UIColor.whiteColor];
-    UILabel *source = [self label:@"Source: Minecraft / Mojang" size:13 weight:UIFontWeightMedium color:VMineSecondary()];
+    UILabel *title = [self label:@"Dragonfly Engine" size:20 weight:UIFontWeightBold color:UIColor.whiteColor];
+    UILabel *source = [self label:@"Open-source Bedrock server written in Go" size:13 weight:UIFontWeightMedium color:VMineSecondary()];
     self.installedLabel = [self label:@"Installed: Not installed" size:15 weight:UIFontWeightMedium color:UIColor.whiteColor];
     self.progressLabel = [self label:@"Files: On My iPhone/iPad > V-MINE > V-MINE Server" size:12 weight:UIFontWeightMedium color:VMineSecondary()];
     self.progressLabel.numberOfLines = 0;
@@ -552,8 +552,7 @@ static BOOL VMineSendCommand(NSString *command) {
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressView.progressTintColor = VMineYellow();
     self.progressView.trackTintColor = [UIColor colorWithWhite:0.25 alpha:1.0];
-    self.installButton = VMineButton(@"Download & Install BDS", @"arrow.down.circle.fill", YES);
-    [self.installButton addTarget:self action:@selector(checkUpdates) forControlEvents:UIControlEventTouchUpInside];
+    self.installButton = VMineButton(@"Included in V-MINE", @"checkmark.circle.fill", YES);
     [card addSubview:title]; [card addSubview:source]; [card addSubview:self.installedLabel]; [card addSubview:self.progressLabel]; [card addSubview:self.progressView]; [card addSubview:self.installButton];
     [NSLayoutConstraint activateConstraints:@[
         [card.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20],
@@ -583,26 +582,11 @@ static BOOL VMineSendCommand(NSString *command) {
 - (void)refresh {
     VMineState *state = VMineState.shared;
     self.installedLabel.text = [NSString stringWithFormat:@"Installed: %@", state.installedVersion];
-    self.installButton.enabled = !state.installing && !state.running;
-    self.installButton.alpha = self.installButton.enabled ? 1.0 : 0.5;
+    self.installButton.enabled = NO;
+    self.installButton.alpha = 0.7;
     self.progressView.hidden = !state.installing;
     self.progressView.progress = state.installProgress;
-    [self.installButton setTitle:(state.installing ? state.statusText : @"Download & Install BDS") forState:UIControlStateNormal];
-}
-- (void)checkUpdates {
-    VMineState *state = VMineState.shared;
-    if (state.installing || state.running) return;
-    state.installing = YES;
-    state.installProgress = 0;
-    state.statusText = @"Preparing download";
-    [state appendLog:@"Downloading official Bedrock Dedicated Server 1.26.44.3..."];
-    NSString *command = @"rm -f /tmp/vmine-bds.zip; mkdir -p /opt/vmine/server /opt/vmine/data && cd /opt/vmine/server && echo VMINE_DOWNLOAD_BEGIN && /bin/busybox wget --no-check-certificate -T 120 -U 'Mozilla/5.0 V-MINE' -O /tmp/vmine-bds.zip 'https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.44.3.zip' && echo VMINE_EXTRACT_BEGIN && /bin/busybox unzip -o /tmp/vmine-bds.zip -d /opt/vmine/server && /bin/busybox sed -i 's/^max-threads=.*/max-threads=1/' /opt/vmine/server/server.properties && chmod +x /opt/vmine/server/bedrock_server && test -x /opt/vmine/server/bedrock_server && test -f /opt/vmine/server/server.properties && rm -f /tmp/vmine-bds.zip && echo VMINE_INSTALL_OK:1.26.44.3 || { rm -f /tmp/vmine-bds.zip; echo VMINE_INSTALL_FAILED; }";
-    if (!VMineSendCommand(command)) {
-        state.installing = NO;
-        state.installProgress = 0;
-        state.statusText = @"Engine unavailable";
-        [state appendLog:@"Install failed: the V-MINE terminal engine is not ready."];
-    }
+    [self.installButton setTitle:@"Included in V-MINE" forState:UIControlStateNormal];
 }
 @end
 
@@ -610,12 +594,12 @@ static BOOL VMineSendCommand(NSString *command) {
 @implementation VMineSettingsViewController
 - (void)viewDidLoad {
     self.items = @[
-        @{@"title": @"Server Name", @"detail": @"My Bedrock Server", @"symbol": @"server.rack"},
+        @{@"title": @"Server Name", @"detail": @"Dragonfly Server", @"symbol": @"server.rack"},
         @{@"title": @"Game Mode", @"detail": @"Survival", @"symbol": @"gamecontroller"},
         @{@"title": @"Difficulty", @"detail": @"Normal", @"symbol": @"dial.medium"},
         @{@"title": @"Max Players", @"detail": @"20", @"symbol": @"person.2"},
         @{@"title": @"Port", @"detail": @"19132", @"symbol": @"network"},
-        @{@"title": @"Updates", @"detail": @"Official Mojang BDS", @"symbol": @"arrow.down.circle"}
+        @{@"title": @"Engine", @"detail": @"Dragonfly bundled", @"symbol": @"checkmark.circle"}
     ];
     [super viewDidLoad];
     self.title = @"Settings";

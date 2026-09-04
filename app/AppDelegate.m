@@ -106,7 +106,7 @@ static int bootError;
 
     FsInitialize();
 
-    // Keep the complete BDS directory in the app's ordinary Documents folder.
+    // Keep the complete Dragonfly directory in the app's ordinary Documents folder.
     // This makes it available at Files > On My iPhone/iPad > V-MINE even when
     // a sideloading signer strips the optional File Provider entitlements.
     NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
