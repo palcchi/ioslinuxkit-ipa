@@ -4,7 +4,46 @@ from pathlib import Path
 path = Path("emu/arch/x86_64/interp.c")
 s = path.read_text()
 anchor = '''            // SYSCALL.\n'''
-insert = r'''            // SSE2 packed integer min/max forms used by glibc vectorized
+insert = r'''            // 0F 5D/5F: MINPS/MAXPS, with 66 prefix MINPD/MAXPD.
+            // Equal and unordered lanes select the source, matching legacy SSE.
+            if (rep_prefix == 0 && (op2 == 0x5d || op2 == 0x5f)) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src, dst;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, sizeof(src)) < 0) {
+                    goto gpf;
+                }
+                dst = cpu->xmm[xmm];
+                if (operand16) {
+                    for (unsigned lane = 0; lane < 2; lane++) {
+                        double a, b;
+                        memcpy(&a, &dst.u64[lane], sizeof(a));
+                        memcpy(&b, &src.u64[lane], sizeof(b));
+                        bool keep_a = op2 == 0x5d ? a < b : a > b;
+                        if (!keep_a) dst.u64[lane] = src.u64[lane];
+                    }
+                } else {
+                    for (unsigned lane = 0; lane < 4; lane++) {
+                        float a, b;
+                        memcpy(&a, &dst.u32[lane], sizeof(a));
+                        memcpy(&b, &src.u32[lane], sizeof(b));
+                        bool keep_a = op2 == 0x5d ? a < b : a > b;
+                        if (!keep_a) dst.u32[lane] = src.u32[lane];
+                    }
+                }
+                cpu->xmm[xmm] = dst;
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
+            // SSE2 packed integer min/max forms used by glibc vectorized
             // string/table routines.
             // 66 0F DA: PMINUB  unsigned byte minimum
             // 66 0F DE: PMAXUB  unsigned byte maximum
@@ -60,4 +99,4 @@ if anchor not in s:
     raise SystemExit("0F dispatch anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with SSE2 packed min/max")
+print("patched x86_64 interpreter with floating-point and integer packed min/max")
