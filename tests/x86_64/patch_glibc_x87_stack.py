@@ -91,7 +91,7 @@ dispatch = r'''        // Minimal x87 raw-stack transport. Modern BDS still reac
                 struct rm_operand rm;
                 unsigned group;
                 addr_t next;
-                if (decode_rm(cpu, rex, fs_prefix, ip + 1, 2, &rm, &group, &next) < 0) goto gpf;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 1, 0, &rm, &group, &next) < 0) goto gpf;
                 if (rm.is_reg) goto undefined;
                 if ((group & 7) == 5) { // FLDCW m16
                     uint16_t control;
