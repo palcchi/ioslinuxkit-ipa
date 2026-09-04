@@ -44,7 +44,7 @@ jobs:
           cp /etc/resolv.conf dragonfly-root/etc/resolv.conf
           (
             cd dragonfly
-	          cp ../vmine-engine/main.go ./main.go
+            cp ../vmine-engine/main.go ./main.go
             CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../dragonfly-root/vmine-dragonfly .
           )
           cp vmine-engine/config.toml dragonfly-root/config.toml
