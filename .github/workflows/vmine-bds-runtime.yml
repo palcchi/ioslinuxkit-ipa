@@ -27,39 +27,34 @@ jobs:
           go-version-file: dragonfly/go.mod
           cache-dependency-path: dragonfly/go.sum
 
-      - name: Apply x86_64 compatibility patches
-        shell: bash
-        run: |
-          set -euo pipefail
-          for p in tests/x86_64/patch_glibc_*.py; do python3 "$p"; done
-
       - name: Install host dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev busybox-static
+          sudo apt-get install -y clang lld meson ninja-build libsqlite3-dev libarchive-dev
 
       - name: Build V-MINE and Dragonfly
         shell: bash
         run: |
           set -euo pipefail
-          meson setup build-x86_64 -Dguest_arch=x86_64 --buildtype=release
-          ninja -C build-x86_64
-          mkdir -p dragonfly-root/bin
-          cp /bin/busybox dragonfly-root/bin/sh
+          meson setup build-arm64 -Dguest_arch=arm64 --buildtype=release
+          ninja -C build-arm64
+          wget -q -O alpine-arm64.tar.gz https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.0-aarch64.tar.gz
+          mkdir dragonfly-root
+          tar -xzf alpine-arm64.tar.gz -C dragonfly-root
           (
             cd dragonfly
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dragonfly-root/vmine-dragonfly .
+            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../dragonfly-root/vmine-dragonfly .
           )
           cp dragonfly/config.toml dragonfly-root/config.toml
           chmod 755 dragonfly-root/vmine-dragonfly
           tar --numeric-owner -C dragonfly-root -cf dragonfly-rootfs.tar .
-          ./build-x86_64/tools/fakefsify dragonfly-rootfs.tar dragonfly-fakefs
+          ./build-arm64/tools/fakefsify dragonfly-rootfs.tar dragonfly-fakefs
 
       - name: Run and verify Dragonfly UDP 19132
         shell: bash
         run: |
           set +e
-          setsid timeout --foreground 600 ./build-x86_64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
+          setsid timeout --foreground 600 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
           vmine_pid=$!
           set -e
           for attempt in $(seq 1 120); do

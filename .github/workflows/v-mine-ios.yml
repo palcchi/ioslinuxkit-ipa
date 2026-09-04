@@ -29,47 +29,28 @@ jobs:
           go-version-file: dragonfly/go.mod
           cache-dependency-path: dragonfly/go.sum
 
-      - name: Build Jammy amd64 runtime rootfs
+      - name: Build Alpine ARM64 Dragonfly rootfs
         shell: bash
         run: |
           set -euo pipefail
-          wget -q -O jammy-base.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04.5-base-amd64.tar.gz
-          mkdir rootfs rootfs-debs
-          tar -xzf jammy-base.tar.gz -C rootfs
-          cat <<'EOF' | sudo tee /etc/apt/sources.list.d/vmine-jammy.list >/dev/null
-          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe
-          deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe
-          deb [arch=amd64] http://security.ubuntu.com/ubuntu jammy-security main universe
-          EOF
-          sudo apt-get update >/dev/null
-          (
-            cd rootfs-debs
-            apt-get download busybox-static:amd64
-            apt-get download libstdc++6:amd64/jammy-updates || apt-get download libstdc++6:amd64/jammy
-            apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
-          )
-          for deb in rootfs-debs/*.deb; do dpkg-deb -x "$deb" rootfs; done
-          busybox_path=$(find rootfs -type f -name busybox -print -quit)
-          test -n "$busybox_path"
-          if [ "$busybox_path" != "rootfs/bin/busybox" ]; then
-            cp "$busybox_path" rootfs/bin/busybox
-            chmod 755 rootfs/bin/busybox
-          fi
+          wget -q -O alpine-arm64.tar.gz https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.0-aarch64.tar.gz
+          mkdir rootfs
+          tar -xzf alpine-arm64.tar.gz -C rootfs
           test -x rootfs/bin/busybox
           mkdir -p rootfs/opt/vmine/server rootfs/opt/vmine/data rootfs/opt/vmine/backups rootfs/ish
           (
             cd dragonfly
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../rootfs/usr/local/bin/vmine-dragonfly .
+            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../rootfs/usr/local/bin/vmine-dragonfly .
           )
           cp dragonfly/config.toml rootfs/usr/local/share/vmine-dragonfly-config.toml
           chmod 755 rootfs/usr/local/bin/vmine-dragonfly
           test -x rootfs/usr/local/bin/vmine-dragonfly
-          tar --numeric-owner -C rootfs -czf vmine-jammy-amd64.tar.gz .
+          tar --numeric-owner -C rootfs -czf vmine-alpine-arm64.tar.gz .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vmine-dragonfly-amd64-rootfs
-          path: vmine-jammy-amd64.tar.gz
+          name: vmine-dragonfly-arm64-rootfs
+          path: vmine-alpine-arm64.tar.gz
 
   build-ios:
     needs: prepare-dragonfly-rootfs
@@ -89,17 +70,11 @@ jobs:
       - name: Install build tools
         run: brew install meson ninja llvm lld
 
-      - name: Download Dragonfly-ready amd64 rootfs
+      - name: Download Dragonfly-ready ARM64 rootfs
         uses: actions/download-artifact@v4
         with:
-          name: vmine-dragonfly-amd64-rootfs
+          name: vmine-dragonfly-arm64-rootfs
           path: prepared-rootfs
-
-      - name: Apply verified x86_64 compatibility patches
-        shell: bash
-        run: |
-          set -euo pipefail
-          for p in tests/x86_64/patch_glibc_*.py; do python3 "$p"; done
 
       - name: Build native V-MINE shell
         run: |
@@ -113,7 +88,7 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build-vmine \
-            ROOTFS_LOCAL_PATH="$PWD/prepared-rootfs/vmine-jammy-amd64.tar.gz" \
+            ROOTFS_LOCAL_PATH="$PWD/prepared-rootfs/vmine-alpine-arm64.tar.gz" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee xcode-build.log
