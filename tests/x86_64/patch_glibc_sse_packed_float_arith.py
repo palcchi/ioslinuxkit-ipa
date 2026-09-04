@@ -3,8 +3,55 @@ from pathlib import Path
 
 interp = Path("emu/arch/x86_64/interp.c")
 s = interp.read_text()
+include_anchor = '''#include <string.h>\n'''
+if include_anchor not in s:
+    raise SystemExit("math include anchor missing")
+s = s.replace(include_anchor, '''#include <string.h>
+#include <math.h>
+''', 1)
 anchor = '''            // SYSCALL.\n'''
-insert = r'''            // Legacy packed SSE/SSE2 floating-point arithmetic.
+insert = r'''            // 0F 51: SQRTPS/SQRTPD/SQRTSS/SQRTSD.
+            if (op2 == 0x51 &&
+                (rep_prefix == 0 || rep_prefix == 0xf2 || rep_prefix == 0xf3)) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src = {.u128 = 0}, dst;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                bool is_double = operand16 || rep_prefix == 0xf2;
+                bool scalar = rep_prefix == 0xf2 || rep_prefix == 0xf3;
+                size_t source_size = scalar ? (is_double ? 8 : 4) : 16;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, source_size) < 0) {
+                    goto gpf;
+                }
+                dst = cpu->xmm[xmm];
+                unsigned lanes = scalar ? 1 : (is_double ? 2 : 4);
+                if (is_double) {
+                    for (unsigned lane = 0; lane < lanes; lane++) {
+                        double value, out;
+                        memcpy(&value, &src.u64[lane], sizeof(value));
+                        out = sqrt(value);
+                        memcpy(&dst.u64[lane], &out, sizeof(out));
+                    }
+                } else {
+                    for (unsigned lane = 0; lane < lanes; lane++) {
+                        float value, out;
+                        memcpy(&value, &src.u32[lane], sizeof(value));
+                        out = sqrtf(value);
+                        memcpy(&dst.u32[lane], &out, sizeof(out));
+                    }
+                }
+                cpu->xmm[xmm] = dst;
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
+            // Legacy packed SSE/SSE2 floating-point arithmetic.
             // No mandatory REP prefix means packed single precision; 66 selects
             // packed double precision. F2/F3 scalar forms are handled elsewhere.
             if (rep_prefix != 0xf2 && rep_prefix != 0xf3 &&
@@ -101,4 +148,4 @@ if main_anchor not in t:
 t = t.replace(main_anchor, main_replace, 1)
 test.write_text(t)
 
-print("patched x86_64 packed SSE/SSE2 floating-point arithmetic")
+print("patched x86_64 SSE square roots and packed floating-point arithmetic")
