@@ -92,7 +92,8 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build-vmine \
+            SYMROOT="$PWD/build-vmine/Build/Products" \
+            OBJROOT="$PWD/build-vmine/Build/Intermediates.noindex" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee xcode-file-provider-build.log
