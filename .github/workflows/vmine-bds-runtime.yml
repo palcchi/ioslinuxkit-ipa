@@ -83,6 +83,15 @@ jobs:
           tar --numeric-owner -C bds-root -cf bds-rootfs.tar .
           ./build-x86_64/tools/fakefsify bds-rootfs.tar bds-fakefs
 
+      - name: Restore previous BDS world state
+        id: bds-cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: bds-fakefs
+          key: vmine-bds-fakefs-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            vmine-bds-fakefs-${{ runner.os }}-
+
       - name: Verify BDS fakefs guest visibility
         shell: bash
         run: |
@@ -127,6 +136,13 @@ jobs:
           fi
           echo 'V-MINE BDS STARTUP: NOT REACHED'
           exit 1
+
+      - name: Save progressed BDS world state
+        if: always() && steps.bds-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bds-fakefs
+          key: vmine-bds-fakefs-${{ runner.os }}-${{ github.sha }}
 
       - name: Upload BDS logs
         if: always()
