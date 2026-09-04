@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          { sleep 3; echo help; echo list; sleep 3; echo stop; } | gtimeout 600 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
+          { echo help; echo list; sleep 300; echo stop; } | gtimeout 600 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
           vmine_pid=$!
           set -e
           for attempt in $(seq 1 120); do
