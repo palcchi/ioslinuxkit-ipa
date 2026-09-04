@@ -51,6 +51,43 @@ insert = r'''            // 0F 51: SQRTPS/SQRTPD/SQRTSS/SQRTSD.
                 continue;
             }
 
+            // F2/F3/66 0F E6: CVTPD2DQ, CVTDQ2PD, CVTTPD2DQ.
+            if (op2 == 0xe6 &&
+                (operand16 || rep_prefix == 0xf2 || rep_prefix == 0xf3)) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                union x86_64_xmm src = {.u128 = 0}, dst = {.u128 = 0};
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                size_t source_size = rep_prefix == 0xf3 ? 8 : 16;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    src = cpu->xmm[rm.reg];
+                } else if (guest_read(cpu, rm.addr, &src, source_size) < 0) {
+                    goto gpf;
+                }
+                if (rep_prefix == 0xf3) {
+                    for (unsigned lane = 0; lane < 2; lane++) {
+                        double out = (double)(int32_t)src.u32[lane];
+                        memcpy(&dst.u64[lane], &out, sizeof(out));
+                    }
+                } else {
+                    for (unsigned lane = 0; lane < 2; lane++) {
+                        double value;
+                        memcpy(&value, &src.u64[lane], sizeof(value));
+                        int32_t out = INT32_MIN;
+                        if (isfinite(value) && value >= -2147483648.0 && value < 2147483648.0)
+                            out = operand16 ? (int32_t)trunc(value) : (int32_t)nearbyint(value);
+                        dst.u32[lane] = (uint32_t)out;
+                    }
+                }
+                cpu->xmm[xmm] = dst;
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
             // 0F 5B: packed integer/single-precision conversions.
             // CVTDQ2PS has no mandatory prefix; 66 selects CVTPS2DQ and F3
             // selects truncating CVTTPS2DQ.
@@ -149,7 +186,27 @@ interp.write_text(s)
 test = Path("tests/x86_64/direct_guest_smoke.c")
 t = test.read_text()
 test_anchor = '''static void test_write_exit(void) {\n'''
-test_insert = r'''static void test_packed_int_float_conversion(void) {
+test_insert = r'''static void test_packed_double_int_conversion(void) {
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+    memset(memory, 0, sizeof(memory));
+    const uint8_t program[] = {
+        0x66,0x0f,0xe6,0xc8,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    const double input[2] = {42.75, -7.9};
+    memcpy(cpu.xmm[0].u64, input, sizeof(input));
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL && cpu.x86_last_syscall == 60);
+    assert((int32_t)cpu.xmm[1].u32[0] == 42);
+    assert((int32_t)cpu.xmm[1].u32[1] == -7);
+    assert(cpu.xmm[1].u64[1] == 0);
+    puts("DIRECT X86_64 PACKED DOUBLE CONVERSION: PASS");
+}
+
+static void test_packed_int_float_conversion(void) {
     struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
     memset(memory, 0, sizeof(memory));
     const uint8_t program[] = {
@@ -202,7 +259,7 @@ if test_anchor not in t:
     raise SystemExit("direct smoke function anchor missing")
 t = t.replace(test_anchor, test_insert + test_anchor, 1)
 main_anchor = '''    test_write_exit();\n'''
-main_replace = '''    test_packed_int_float_conversion();\n    test_packed_sse_float_arith();\n    test_write_exit();\n'''
+main_replace = '''    test_packed_double_int_conversion();\n    test_packed_int_float_conversion();\n    test_packed_sse_float_arith();\n    test_write_exit();\n'''
 if main_anchor not in t:
     raise SystemExit("direct smoke main anchor missing")
 t = t.replace(main_anchor, main_replace, 1)
