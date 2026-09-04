@@ -89,6 +89,7 @@ jobs:
           set -euo pipefail
           timeout 20 ./build-x86_64/ish -f bds-fakefs /bin/ls -l /lib64/ld-linux-x86-64.so.2 /bedrock_server 2>&1 | tee bds-visibility.log
 
+      # Success requires an actual kernel UDP socket, not a log banner.
       - name: Run and verify BDS UDP 19132
         shell: bash
         run: |
