@@ -52,6 +52,7 @@ static UIButton *VMineButton(NSString *title, NSString *symbol, BOOL primary) {
 @interface VMineState : NSObject
 @property (nonatomic) BOOL running;
 @property (nonatomic) BOOL installing;
+@property (nonatomic) double installProgress;
 @property (nonatomic, copy) NSString *statusText;
 @property (nonatomic, copy) NSString *installedVersion;
 @property (nonatomic, strong) NSMutableArray<NSString *> *consoleLines;
@@ -71,6 +72,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         state = [VMineState new];
         state.running = NO;
         state.installing = NO;
+        state.installProgress = 0;
         state.statusText = @"Offline";
         state.installedVersion = [[NSUserDefaults standardUserDefaults] stringForKey:@"VMineInstalledBDSVersion"] ?: @"Not installed";
         state.consoleLines = [NSMutableArray arrayWithObjects:
@@ -99,6 +101,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     if (data.length == 0) return;
     NSString *chunk = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     if (chunk.length == 0) return;
+    chunk = [chunk stringByReplacingOccurrencesOfString:@"\r" withString:@"\n"];
     [self.terminalBuffer appendString:chunk];
     NSArray<NSString *> *parts = [self.terminalBuffer componentsSeparatedByString:@"\n"];
     self.terminalBuffer = [parts.lastObject mutableCopy];
@@ -106,15 +109,30 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         NSString *line = [parts[i] stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet];
         if (line.length == 0) continue;
         [self appendLog:line];
-        if ([line containsString:@"VMINE_INSTALL_OK:"]) {
+        if ([line containsString:@"VMINE_DOWNLOAD_BEGIN"]) {
+            self.statusText = @"Downloading BDS";
+        } else if ([line containsString:@"VMINE_EXTRACT_BEGIN"]) {
+            self.installProgress = MAX(self.installProgress, 0.95);
+            self.statusText = @"Extracting BDS";
+        } else if (self.installing && [line containsString:@"%"] && [line rangeOfString:@"[0-9]{1,3}%" options:NSRegularExpressionSearch].location != NSNotFound) {
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"([0-9]{1,3})%" options:0 error:nil];
+            NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+            if (match.numberOfRanges > 1) {
+                NSInteger percent = [[line substringWithRange:[match rangeAtIndex:1]] integerValue];
+                self.installProgress = MIN(0.94, MAX(0.0, percent / 100.0 * 0.94));
+                self.statusText = [NSString stringWithFormat:@"Downloading %ld%%", (long)percent];
+            }
+        } else if ([line containsString:@"VMINE_INSTALL_OK:"]) {
             NSString *version = [[line componentsSeparatedByString:@"VMINE_INSTALL_OK:"] lastObject];
             version = [version stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             self.installedVersion = version.length ? version : @"Installed";
             self.installing = NO;
+            self.installProgress = 1;
             self.statusText = @"Offline";
             [NSUserDefaults.standardUserDefaults setObject:self.installedVersion forKey:@"VMineInstalledBDSVersion"];
         } else if ([line containsString:@"VMINE_INSTALL_FAILED"]) {
             self.installing = NO;
+            self.installProgress = 0;
             self.statusText = @"Install failed";
         } else if ([line containsString:@"IPv4 supported"] && [line containsString:@"19132"]) {
             self.running = YES;
@@ -515,6 +533,8 @@ static BOOL VMineSendCommand(NSString *command) {
 
 @interface VMineUpdatesViewController : VMineBaseViewController
 @property UILabel *installedLabel;
+@property UILabel *progressLabel;
+@property UIProgressView *progressView;
 @property UIButton *installButton;
 @end
 @implementation VMineUpdatesViewController
@@ -526,9 +546,15 @@ static BOOL VMineSendCommand(NSString *command) {
     UILabel *title = [self label:@"Official Bedrock Server" size:20 weight:UIFontWeightBold color:UIColor.whiteColor];
     UILabel *source = [self label:@"Source: Minecraft / Mojang" size:13 weight:UIFontWeightMedium color:VMineSecondary()];
     self.installedLabel = [self label:@"Installed: Not installed" size:15 weight:UIFontWeightMedium color:UIColor.whiteColor];
+    self.progressLabel = [self label:@"Files: On My iPhone/iPad > V-MINE > V-MINE Server" size:12 weight:UIFontWeightMedium color:VMineSecondary()];
+    self.progressLabel.numberOfLines = 0;
+    self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressView.progressTintColor = VMineYellow();
+    self.progressView.trackTintColor = [UIColor colorWithWhite:0.25 alpha:1.0];
     self.installButton = VMineButton(@"Download & Install BDS", @"arrow.down.circle.fill", YES);
     [self.installButton addTarget:self action:@selector(checkUpdates) forControlEvents:UIControlEventTouchUpInside];
-    [card addSubview:title]; [card addSubview:source]; [card addSubview:self.installedLabel]; [card addSubview:self.installButton];
+    [card addSubview:title]; [card addSubview:source]; [card addSubview:self.installedLabel]; [card addSubview:self.progressLabel]; [card addSubview:self.progressView]; [card addSubview:self.installButton];
     [NSLayoutConstraint activateConstraints:@[
         [card.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20],
         [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
@@ -540,7 +566,13 @@ static BOOL VMineSendCommand(NSString *command) {
         [source.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
         [self.installedLabel.topAnchor constraintEqualToAnchor:source.bottomAnchor constant:22],
         [self.installedLabel.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
-        [self.installButton.topAnchor constraintEqualToAnchor:self.installedLabel.bottomAnchor constant:22],
+        [self.progressLabel.topAnchor constraintEqualToAnchor:self.installedLabel.bottomAnchor constant:10],
+        [self.progressLabel.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [self.progressLabel.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.progressView.topAnchor constraintEqualToAnchor:self.progressLabel.bottomAnchor constant:16],
+        [self.progressView.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [self.progressView.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.installButton.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:18],
         [self.installButton.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
         [self.installButton.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
         [self.installButton.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
@@ -553,16 +585,21 @@ static BOOL VMineSendCommand(NSString *command) {
     self.installedLabel.text = [NSString stringWithFormat:@"Installed: %@", state.installedVersion];
     self.installButton.enabled = !state.installing && !state.running;
     self.installButton.alpha = self.installButton.enabled ? 1.0 : 0.5;
-    [self.installButton setTitle:(state.installing ? @"Installing..." : @"Download & Install BDS") forState:UIControlStateNormal];
+    self.progressView.hidden = !state.installing;
+    self.progressView.progress = state.installProgress;
+    [self.installButton setTitle:(state.installing ? state.statusText : @"Download & Install BDS") forState:UIControlStateNormal];
 }
 - (void)checkUpdates {
     VMineState *state = VMineState.shared;
+    if (state.installing || state.running) return;
     state.installing = YES;
-    state.statusText = @"Installing";
+    state.installProgress = 0;
+    state.statusText = @"Preparing download";
     [state appendLog:@"Downloading official Bedrock Dedicated Server 1.26.44.3..."];
-    NSString *command = @"mkdir -p /opt/vmine/server /opt/vmine/data && cd /opt/vmine/server && echo VMINE_DOWNLOAD_BEGIN && /bin/busybox wget --no-check-certificate -T 120 -U 'Mozilla/5.0 V-MINE' -O /tmp/vmine-bds.zip 'https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.44.3.zip' && echo VMINE_EXTRACT_BEGIN && /bin/busybox unzip -o /tmp/vmine-bds.zip -d /opt/vmine/server && /bin/busybox sed -i 's/^max-threads=.*/max-threads=1/' /opt/vmine/server/server.properties && chmod +x /opt/vmine/server/bedrock_server && rm -f /tmp/vmine-bds.zip && echo VMINE_INSTALL_OK:1.26.44.3 || echo VMINE_INSTALL_FAILED";
+    NSString *command = @"rm -f /tmp/vmine-bds.zip; mkdir -p /opt/vmine/server /opt/vmine/data && cd /opt/vmine/server && echo VMINE_DOWNLOAD_BEGIN && /bin/busybox wget --no-check-certificate -T 120 -U 'Mozilla/5.0 V-MINE' -O /tmp/vmine-bds.zip 'https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.44.3.zip' && echo VMINE_EXTRACT_BEGIN && /bin/busybox unzip -o /tmp/vmine-bds.zip -d /opt/vmine/server && /bin/busybox sed -i 's/^max-threads=.*/max-threads=1/' /opt/vmine/server/server.properties && chmod +x /opt/vmine/server/bedrock_server && test -x /opt/vmine/server/bedrock_server && test -f /opt/vmine/server/server.properties && rm -f /tmp/vmine-bds.zip && echo VMINE_INSTALL_OK:1.26.44.3 || { rm -f /tmp/vmine-bds.zip; echo VMINE_INSTALL_FAILED; }";
     if (!VMineSendCommand(command)) {
         state.installing = NO;
+        state.installProgress = 0;
         state.statusText = @"Engine unavailable";
         [state appendLog:@"Install failed: the V-MINE terminal engine is not ready."];
     }

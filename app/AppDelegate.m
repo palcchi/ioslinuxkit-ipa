@@ -27,6 +27,7 @@
 #include "kernel/calls.h"
 #include "fs/dyndev.h"
 #include "fs/devices.h"
+#include "fs/fake.h"
 #include "fs/path.h"
 #if !ISH_LINUX && defined(GUEST_ARM64)
 #include "DebugServer.h"
@@ -101,6 +102,25 @@ static int bootError;
 #endif
 
     FsInitialize();
+
+    // Keep the complete BDS directory in the app's ordinary Documents folder.
+    // This makes it available at Files > On My iPhone/iPad > V-MINE even when
+    // a sideloading signer strips the optional File Provider entitlements.
+    NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
+                                                            inDomains:NSUserDomainMask].firstObject;
+    NSURL *serverDirectory = [documents URLByAppendingPathComponent:@"V-MINE Server" isDirectory:YES];
+    NSError *directoryError = nil;
+    [NSFileManager.defaultManager createDirectoryAtURL:serverDirectory
+                           withIntermediateDirectories:YES
+                                            attributes:nil
+                                                 error:&directoryError];
+    if (directoryError != nil) {
+        NSLog(@"could not create visible V-MINE server directory: %@", directoryError);
+    } else {
+        err = fakefs_bind_mount("/opt/vmine/server", serverDirectory.fileSystemRepresentation, false);
+        if (err < 0)
+            NSLog(@"could not bind visible V-MINE server directory: %d", err);
+    }
 
     // create some device nodes
     // this will do nothing if they already exist
