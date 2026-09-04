@@ -201,6 +201,21 @@ insert = r'''            // 0F C2 /r ib: CMPPS/CMPPD/CMPSS/CMPSD. Legacy predica
                 continue;
             }
 
+            // 66 0F C5 /r ib: PEXTRW r32, xmm, imm8.
+            if (operand16 && !rep_prefix && op2 == 0xc5) {
+                struct rm_operand rm;
+                unsigned gpr;
+                addr_t next;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &gpr, &next) < 0) goto gpf;
+                if (!rm.is_reg || rm.reg >= 16 || gpr >= 16) goto undefined;
+                uint8_t lane;
+                if (fetch_u8(cpu, next, &lane) < 0) goto gpf;
+                write_reg_bits(cpu, gpr, cpu->xmm[rm.reg].u16[lane & 7], 32);
+                cpu->pc = next + 1;
+                cpu->cycle++;
+                continue;
+            }
+
             // 66 0F D7 /r: PMOVMSKB r32, xmm. The source is register-only.
             if (operand16 && op2 == 0xd7) {
                 struct rm_operand rm;
@@ -222,4 +237,35 @@ if anchor not in s:
     raise SystemExit("0F dispatch anchor missing")
 s = s.replace(anchor, insert + anchor, 1)
 path.write_text(s)
-print("patched x86_64 interpreter with CMP vector masks and scalar SSE compares")
+
+test = Path("tests/x86_64/direct_guest_smoke.c")
+t = test.read_text()
+func_anchor = '''static void test_write_exit(void) {\n'''
+func = r'''static void test_pextrw(void) {
+    struct mmu mmu = {.ops = &ops, .asbestos = NULL, .changes = 0};
+    memset(memory, 0, sizeof(memory));
+    const uint8_t program[] = {
+        0x66,0x0f,0xc5,0xcc,0x05,
+        0x48,0xc7,0xc0,0x3c,0x00,0x00,0x00,
+        0x0f,0x05,
+    };
+    memcpy(memory, program, sizeof(program));
+    struct cpu_state cpu = fresh_cpu(&mmu);
+    cpu.xmm[4].u16[5] = 0xbeef;
+    int interrupt = cpu_run_to_interrupt(&cpu, NULL);
+    assert(interrupt == INT_SYSCALL && cpu.x86_last_syscall == 60);
+    assert(x86_64_get_reg(&cpu, X86_64_RCX) == 0xbeef);
+    puts("DIRECT X86_64 PEXTRW: PASS");
+}
+
+'''
+if func_anchor not in t:
+    raise SystemExit("PEXTRW test anchor missing")
+t = t.replace(func_anchor, func + func_anchor, 1)
+main_anchor = '''    test_write_exit();\n'''
+if main_anchor not in t:
+    raise SystemExit("PEXTRW main anchor missing")
+t = t.replace(main_anchor, '''    test_pextrw();\n    test_write_exit();\n''', 1)
+test.write_text(t)
+
+print("patched x86_64 interpreter with CMP masks, scalar compares, and PEXTRW")
