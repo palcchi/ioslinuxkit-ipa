@@ -41,6 +41,7 @@ jobs:
           wget -q -O alpine-arm64.tar.gz https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.0-aarch64.tar.gz
           mkdir dragonfly-root
           tar -xzf alpine-arm64.tar.gz -C dragonfly-root
+          cp /etc/resolv.conf dragonfly-root/etc/resolv.conf
           (
             cd dragonfly
             CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../dragonfly-root/vmine-dragonfly .
