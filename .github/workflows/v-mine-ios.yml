@@ -88,17 +88,6 @@ jobs:
           rm -rf build-vmine
           xcodebuild \
             -project V-MINE.xcodeproj \
-            -target V-MINEFileProvider \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            SYMROOT="$PWD/build-vmine/Build/Products" \
-            OBJROOT="$PWD/build-vmine/Build/Intermediates.noindex" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            build 2>&1 | tee xcode-file-provider-build.log
-          xcodebuild \
-            -project V-MINE.xcodeproj \
             -scheme V-MINE-ARM64 \
             -configuration Release \
             -sdk iphoneos \
@@ -108,6 +97,16 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee xcode-build.log
+          xcodebuild \
+            -project V-MINE.xcodeproj \
+            -target V-MINEFileProvider \
+            -configuration Release \
+            -sdk iphoneos \
+            SYMROOT="$PWD/build-vmine/Build/Products" \
+            OBJROOT="$PWD/build-vmine/Build/Intermediates.noindex" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee xcode-file-provider-build.log
 
       - name: Show build errors
         if: failure()
