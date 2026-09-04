@@ -11,15 +11,15 @@
 TerminalViewController *currentTerminalViewController = NULL;
 
 static UIColor *VMineYellow(void) {
-    return [UIColor colorWithRed:1.0 green:0.78 blue:0.0 alpha:1.0];
+    return [UIColor colorWithRed:1.0 green:0.80 blue:0.02 alpha:1.0];
 }
 
 static UIColor *VMineBackground(void) {
-    return [UIColor colorWithWhite:0.035 alpha:1.0];
+    return [UIColor colorWithRed:0.035 green:0.039 blue:0.047 alpha:1.0];
 }
 
 static UIColor *VMineCard(void) {
-    return [UIColor colorWithWhite:0.095 alpha:1.0];
+    return [UIColor colorWithRed:0.075 green:0.082 blue:0.098 alpha:1.0];
 }
 
 static UIColor *VMineSecondary(void) {
@@ -97,8 +97,24 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     self.navigationController.navigationBar.prefersLargeTitles = YES;
     self.navigationController.navigationBar.barStyle = UIBarStyleBlack;
     self.navigationController.navigationBar.tintColor = VMineYellow();
-    self.navigationController.navigationBar.largeTitleTextAttributes = @{NSForegroundColorAttributeName: UIColor.whiteColor};
-    self.navigationController.navigationBar.titleTextAttributes = @{NSForegroundColorAttributeName: UIColor.whiteColor};
+    self.navigationController.navigationBar.largeTitleTextAttributes = @{
+        NSForegroundColorAttributeName: UIColor.whiteColor,
+        NSFontAttributeName: [UIFont systemFontOfSize:34 weight:UIFontWeightBold]
+    };
+    self.navigationController.navigationBar.titleTextAttributes = @{
+        NSForegroundColorAttributeName: UIColor.whiteColor,
+        NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]
+    };
+    if (@available(iOS 15.0, *)) {
+        UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
+        [appearance configureWithOpaqueBackground];
+        appearance.backgroundColor = VMineBackground();
+        appearance.shadowColor = UIColor.clearColor;
+        appearance.largeTitleTextAttributes = self.navigationController.navigationBar.largeTitleTextAttributes;
+        appearance.titleTextAttributes = self.navigationController.navigationBar.titleTextAttributes;
+        self.navigationController.navigationBar.standardAppearance = appearance;
+        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+    }
 }
 - (UIView *)card {
     UIView *view = [UIView new];
@@ -106,6 +122,8 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     view.backgroundColor = VMineCard();
     view.layer.cornerRadius = 18;
     view.layer.cornerCurve = kCACornerCurveContinuous;
+    view.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    view.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.09].CGColor;
     return view;
 }
 - (UILabel *)label:(NSString *)text size:(CGFloat)size weight:(UIFontWeight)weight color:(UIColor *)color {
@@ -124,6 +142,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
 @property UILabel *versionValue;
 @property UIButton *startButton;
 @property UIButton *stopButton;
+@property UIView *statusDot;
 @end
 
 @implementation VMineDashboardViewController
@@ -140,12 +159,28 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
 
     UIView *hero = [self card];
     [content addSubview:hero];
-    UILabel *serverName = [self label:@"My Bedrock Server" size:21 weight:UIFontWeightBold color:UIColor.whiteColor];
+    UIImageView *mark = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"VMineMark"]];
+    mark.translatesAutoresizingMaskIntoConstraints = NO;
+    mark.contentMode = UIViewContentModeScaleAspectFit;
+    mark.layer.cornerRadius = 15;
+    mark.layer.cornerCurve = kCACornerCurveContinuous;
+    mark.clipsToBounds = YES;
+    [hero addSubview:mark];
+    UILabel *eyebrow = [self label:@"V-MINE  •  LOCAL HOST" size:11 weight:UIFontWeightBold color:VMineYellow()];
+    [hero addSubview:eyebrow];
+    UILabel *serverName = [self label:@"My Bedrock Server" size:24 weight:UIFontWeightBold color:UIColor.whiteColor];
     [hero addSubview:serverName];
+    UILabel *serverSubtitle = [self label:@"Official x86-64 Bedrock runtime" size:13 weight:UIFontWeightRegular color:VMineSecondary()];
+    [hero addSubview:serverSubtitle];
     UILabel *statusCaption = [self label:@"STATUS" size:11 weight:UIFontWeightSemibold color:VMineSecondary()];
     [hero addSubview:statusCaption];
     self.statusValue = [self label:@"Offline" size:15 weight:UIFontWeightSemibold color:VMineYellow()];
     [hero addSubview:self.statusValue];
+    self.statusDot = [UIView new];
+    self.statusDot.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusDot.backgroundColor = VMineYellow();
+    self.statusDot.layer.cornerRadius = 4;
+    [hero addSubview:self.statusDot];
     UILabel *versionCaption = [self label:@"BEDROCK VERSION" size:11 weight:UIFontWeightSemibold color:VMineSecondary()];
     [hero addSubview:versionCaption];
     self.versionValue = [self label:@"Not installed" size:15 weight:UIFontWeightMedium color:UIColor.whiteColor];
@@ -153,22 +188,29 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
 
     UIView *network = [self card];
     [content addSubview:network];
-    UILabel *networkTitle = [self label:@"Local Server" size:17 weight:UIFontWeightSemibold color:UIColor.whiteColor];
+    UILabel *networkTitle = [self label:@"Connect from Minecraft" size:17 weight:UIFontWeightSemibold color:UIColor.whiteColor];
     [network addSubview:networkTitle];
-    UILabel *address = [self label:@"Address\nThis iPad / iPhone\n\nPort\n19132 UDP" size:14 weight:UIFontWeightRegular color:VMineSecondary()];
+    UILabel *address = [self label:@"ADDRESS\nThis iPad or iPhone" size:12 weight:UIFontWeightSemibold color:VMineSecondary()];
     [network addSubview:address];
+    UILabel *port = [self label:@"PORT\n19132 / UDP" size:12 weight:UIFontWeightSemibold color:VMineSecondary()];
+    port.textAlignment = NSTextAlignmentRight;
+    [network addSubview:port];
 
     self.startButton = VMineButton(@"Start Server", @"play.fill", YES);
     self.stopButton = VMineButton(@"Stop Server", @"stop.fill", NO);
-    [content addSubview:self.startButton];
-    [content addSubview:self.stopButton];
+    UIStackView *actions = [[UIStackView alloc] initWithArrangedSubviews:@[self.startButton, self.stopButton]];
+    actions.translatesAutoresizingMaskIntoConstraints = NO;
+    actions.axis = UILayoutConstraintAxisHorizontal;
+    actions.spacing = 10;
+    actions.distribution = UIStackViewDistributionFillEqually;
+    [content addSubview:actions];
     [self.startButton addTarget:self action:@selector(startTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.stopButton addTarget:self action:@selector(stopTapped) forControlEvents:UIControlEventTouchUpInside];
 
     UIView *info = [self card];
     [content addSubview:info];
-    UILabel *infoTitle = [self label:@"V-MINE" size:17 weight:UIFontWeightSemibold color:UIColor.whiteColor];
-    UILabel *infoText = [self label:@"Official Bedrock Dedicated Server runtime. Worlds and server data stay separate from engine updates." size:14 weight:UIFontWeightRegular color:VMineSecondary()];
+    UILabel *infoTitle = [self label:@"Your world stays yours" size:17 weight:UIFontWeightSemibold color:UIColor.whiteColor];
+    UILabel *infoText = [self label:@"Worlds, settings and backups are stored separately from the replaceable server engine." size:14 weight:UIFontWeightRegular color:VMineSecondary()];
     [info addSubview:infoTitle];
     [info addSubview:infoText];
 
@@ -188,17 +230,31 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         [hero.topAnchor constraintEqualToAnchor:content.topAnchor constant:18],
         [hero.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:18],
         [hero.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-18],
-        [serverName.topAnchor constraintEqualToAnchor:hero.topAnchor constant:20],
-        [serverName.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor constant:20],
+        [mark.topAnchor constraintEqualToAnchor:hero.topAnchor constant:20],
+        [mark.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor constant:20],
+        [mark.widthAnchor constraintEqualToConstant:56],
+        [mark.heightAnchor constraintEqualToConstant:56],
+        [eyebrow.topAnchor constraintEqualToAnchor:mark.topAnchor constant:2],
+        [eyebrow.leadingAnchor constraintEqualToAnchor:mark.trailingAnchor constant:14],
+        [eyebrow.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor constant:-20],
+        [serverName.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:5],
+        [serverName.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
         [serverName.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor constant:-20],
-        [statusCaption.topAnchor constraintEqualToAnchor:serverName.bottomAnchor constant:22],
-        [statusCaption.leadingAnchor constraintEqualToAnchor:serverName.leadingAnchor],
+        [serverSubtitle.topAnchor constraintEqualToAnchor:serverName.bottomAnchor constant:3],
+        [serverSubtitle.leadingAnchor constraintEqualToAnchor:serverName.leadingAnchor],
+        [serverSubtitle.trailingAnchor constraintEqualToAnchor:serverName.trailingAnchor],
+        [statusCaption.topAnchor constraintEqualToAnchor:mark.bottomAnchor constant:24],
+        [statusCaption.leadingAnchor constraintEqualToAnchor:mark.leadingAnchor],
         [self.statusValue.topAnchor constraintEqualToAnchor:statusCaption.bottomAnchor constant:4],
-        [self.statusValue.leadingAnchor constraintEqualToAnchor:serverName.leadingAnchor],
+        [self.statusDot.centerYAnchor constraintEqualToAnchor:self.statusValue.centerYAnchor],
+        [self.statusDot.leadingAnchor constraintEqualToAnchor:mark.leadingAnchor],
+        [self.statusDot.widthAnchor constraintEqualToConstant:8],
+        [self.statusDot.heightAnchor constraintEqualToConstant:8],
+        [self.statusValue.leadingAnchor constraintEqualToAnchor:self.statusDot.trailingAnchor constant:8],
         [versionCaption.topAnchor constraintEqualToAnchor:self.statusValue.bottomAnchor constant:18],
-        [versionCaption.leadingAnchor constraintEqualToAnchor:serverName.leadingAnchor],
+        [versionCaption.leadingAnchor constraintEqualToAnchor:mark.leadingAnchor],
         [self.versionValue.topAnchor constraintEqualToAnchor:versionCaption.bottomAnchor constant:4],
-        [self.versionValue.leadingAnchor constraintEqualToAnchor:serverName.leadingAnchor],
+        [self.versionValue.leadingAnchor constraintEqualToAnchor:mark.leadingAnchor],
         [self.versionValue.bottomAnchor constraintEqualToAnchor:hero.bottomAnchor constant:-20],
 
         [network.topAnchor constraintEqualToAnchor:hero.bottomAnchor constant:14],
@@ -208,17 +264,17 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
         [networkTitle.leadingAnchor constraintEqualToAnchor:network.leadingAnchor constant:20],
         [address.topAnchor constraintEqualToAnchor:networkTitle.bottomAnchor constant:12],
         [address.leadingAnchor constraintEqualToAnchor:networkTitle.leadingAnchor],
-        [address.trailingAnchor constraintEqualToAnchor:network.trailingAnchor constant:-20],
+        [port.topAnchor constraintEqualToAnchor:address.topAnchor],
+        [port.trailingAnchor constraintEqualToAnchor:network.trailingAnchor constant:-20],
+        [port.leadingAnchor constraintGreaterThanOrEqualToAnchor:address.trailingAnchor constant:12],
         [address.bottomAnchor constraintEqualToAnchor:network.bottomAnchor constant:-18],
+        [port.bottomAnchor constraintLessThanOrEqualToAnchor:network.bottomAnchor constant:-18],
 
-        [self.startButton.topAnchor constraintEqualToAnchor:network.bottomAnchor constant:16],
-        [self.startButton.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],
-        [self.startButton.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],
-        [self.stopButton.topAnchor constraintEqualToAnchor:self.startButton.bottomAnchor constant:10],
-        [self.stopButton.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],
-        [self.stopButton.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],
+        [actions.topAnchor constraintEqualToAnchor:network.bottomAnchor constant:16],
+        [actions.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],
+        [actions.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],
 
-        [info.topAnchor constraintEqualToAnchor:self.stopButton.bottomAnchor constant:16],
+        [info.topAnchor constraintEqualToAnchor:actions.bottomAnchor constant:16],
         [info.leadingAnchor constraintEqualToAnchor:hero.leadingAnchor],
         [info.trailingAnchor constraintEqualToAnchor:hero.trailingAnchor],
         [infoTitle.topAnchor constraintEqualToAnchor:info.topAnchor constant:18],
@@ -237,6 +293,7 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     VMineState *state = VMineState.shared;
     self.statusValue.text = state.statusText;
     self.statusValue.textColor = state.running ? [UIColor colorWithRed:0.35 green:0.9 blue:0.4 alpha:1] : VMineYellow();
+    self.statusDot.backgroundColor = self.statusValue.textColor;
     self.versionValue.text = state.installedVersion;
     self.stopButton.enabled = state.running;
     self.stopButton.alpha = state.running ? 1.0 : 0.5;
@@ -464,6 +521,23 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     self.title = @"V-MINE";
     self.tableView.backgroundColor = [UIColor colorWithWhite:0.055 alpha:1];
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 280, 104)];
+    UIImageView *mark = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"VMineMark"]];
+    mark.frame = CGRectMake(18, 22, 54, 54);
+    mark.layer.cornerRadius = 14;
+    mark.clipsToBounds = YES;
+    [header addSubview:mark];
+    UILabel *brand = [[UILabel alloc] initWithFrame:CGRectMake(86, 25, 170, 28)];
+    brand.text = @"V-MINE";
+    brand.textColor = UIColor.whiteColor;
+    brand.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
+    [header addSubview:brand];
+    UILabel *caption = [[UILabel alloc] initWithFrame:CGRectMake(86, 53, 170, 20)];
+    caption.text = @"Bedrock server";
+    caption.textColor = VMineSecondary();
+    caption.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    [header addSubview:caption];
+    self.tableView.tableHeaderView = header;
     self.entries = @[
         @{@"title": @"Dashboard", @"symbol": @"rectangle.grid.2x2.fill"},
         @{@"title": @"Console", @"symbol": @"terminal.fill"},
@@ -479,8 +553,13 @@ static NSString *const VMineStateDidChangeNotification = @"VMineStateDidChangeNo
     NSDictionary *entry = self.entries[indexPath.row];
     cell.textLabel.text = entry[@"title"];
     cell.textLabel.textColor = UIColor.whiteColor;
+    cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     cell.backgroundColor = UIColor.clearColor;
     cell.tintColor = VMineYellow();
+    UIView *selected = [UIView new];
+    selected.backgroundColor = [VMineYellow() colorWithAlphaComponent:0.14];
+    selected.layer.cornerRadius = 12;
+    cell.selectedBackgroundView = selected;
     if (@available(iOS 13.0, *)) cell.imageView.image = [UIImage systemImageNamed:entry[@"symbol"]];
     return cell;
 }
@@ -522,6 +601,14 @@ static NSString *const TerminalUUID = @"TerminalUUID";
     tabs.tabBar.tintColor = VMineYellow();
     tabs.tabBar.unselectedItemTintColor = [UIColor colorWithWhite:0.55 alpha:1.0];
     tabs.tabBar.backgroundColor = [UIColor colorWithWhite:0.055 alpha:1.0];
+    if (@available(iOS 15.0, *)) {
+        UITabBarAppearance *appearance = [UITabBarAppearance new];
+        [appearance configureWithOpaqueBackground];
+        appearance.backgroundColor = [UIColor colorWithWhite:0.055 alpha:1.0];
+        appearance.shadowColor = [UIColor colorWithWhite:1 alpha:0.08];
+        tabs.tabBar.standardAppearance = appearance;
+        tabs.tabBar.scrollEdgeAppearance = appearance;
+    }
 
     NSArray *titles = @[@"Home", @"Console", @"Worlds", @"Players", @"Settings"];
     NSArray *symbols = @[@"rectangle.grid.2x2.fill", @"terminal.fill", @"shippingbox.fill", @"person.2.fill", @"gearshape.fill"];
