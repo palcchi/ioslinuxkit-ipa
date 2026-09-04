@@ -201,6 +201,47 @@ insert = r'''            // 0F C2 /r ib: CMPPS/CMPPD/CMPSS/CMPSD. Legacy predica
                 continue;
             }
 
+            // 66 0F C4 /r ib: PINSRW xmm, r32/m16, imm8.
+            if (operand16 && !rep_prefix && op2 == 0xc4) {
+                struct rm_operand rm;
+                unsigned xmm;
+                addr_t next;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &xmm, &next) < 0) goto gpf;
+                if (xmm >= 16) goto undefined;
+                uint16_t value;
+                if (rm.is_reg) {
+                    if (rm.reg >= 16) goto undefined;
+                    value = (uint16_t)read_reg_bits(cpu, rm.reg, 16);
+                } else if (guest_read(cpu, rm.addr, &value, sizeof(value)) < 0) goto gpf;
+                uint8_t lane;
+                if (fetch_u8(cpu, next, &lane) < 0) goto gpf;
+                cpu->xmm[xmm].u16[lane & 7] = value;
+                cpu->pc = next + 1;
+                cpu->cycle++;
+                continue;
+            }
+
+            // 0F 50 /r: MOVMSKPS; 66 0F 50 /r: MOVMSKPD.
+            if (!rep_prefix && op2 == 0x50) {
+                struct rm_operand rm;
+                unsigned gpr;
+                addr_t next;
+                if (decode_rm(cpu, rex, fs_prefix, ip + 2, 0, &rm, &gpr, &next) < 0) goto gpf;
+                if (!rm.is_reg || rm.reg >= 16 || gpr >= 16) goto undefined;
+                uint32_t mask = 0;
+                if (operand16) {
+                    for (unsigned lane = 0; lane < 2; lane++)
+                        mask |= (uint32_t)(cpu->xmm[rm.reg].u64[lane] >> 63) << lane;
+                } else {
+                    for (unsigned lane = 0; lane < 4; lane++)
+                        mask |= (cpu->xmm[rm.reg].u32[lane] >> 31) << lane;
+                }
+                write_reg_bits(cpu, gpr, mask, 32);
+                cpu->pc = next;
+                cpu->cycle++;
+                continue;
+            }
+
             // 66 0F C5 /r ib: PEXTRW r32, xmm, imm8.
             if (operand16 && !rep_prefix && op2 == 0xc5) {
                 struct rm_operand rm;
