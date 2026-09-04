@@ -36,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$(brew --prefix llvm)/bin:$(brew --prefix lld)/bin:$PATH"
-          CFLAGS='-D_XOPEN_SOURCE=700' meson setup build-arm64 -Dguest_arch=arm64 --buildtype=release
+          CFLAGS='-D_XOPEN_SOURCE=700 -D_DARWIN_C_SOURCE' meson setup build-arm64 -Dguest_arch=arm64 --buildtype=release
           ninja -C build-arm64
           wget -q -O alpine-arm64.tar.gz https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.0-aarch64.tar.gz
           mkdir dragonfly-root
