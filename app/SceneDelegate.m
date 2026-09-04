@@ -560,7 +560,7 @@ static BOOL VMineSendCommand(NSString *command) {
     state.installing = YES;
     state.statusText = @"Installing";
     [state appendLog:@"Downloading official Bedrock Dedicated Server 1.26.44.3..."];
-    NSString *command = @"mkdir -p /opt/vmine/server /opt/vmine/data && cd /opt/vmine/server && /bin/busybox wget -q -O /tmp/vmine-bds.zip 'https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.44.3.zip' && /bin/busybox unzip -o /tmp/vmine-bds.zip -d /opt/vmine/server && chmod +x /opt/vmine/server/bedrock_server && rm -f /tmp/vmine-bds.zip && echo VMINE_INSTALL_OK:1.26.44.3 || echo VMINE_INSTALL_FAILED";
+    NSString *command = @"mkdir -p /opt/vmine/server /opt/vmine/data && cd /opt/vmine/server && /bin/busybox wget -q -O /tmp/vmine-bds.zip 'https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.44.3.zip' && /bin/busybox unzip -o /tmp/vmine-bds.zip -d /opt/vmine/server && /bin/busybox sed -i 's/^max-threads=.*/max-threads=1/' /opt/vmine/server/server.properties && chmod +x /opt/vmine/server/bedrock_server && rm -f /tmp/vmine-bds.zip && echo VMINE_INSTALL_OK:1.26.44.3 || echo VMINE_INSTALL_FAILED";
     if (!VMineSendCommand(command)) {
         state.installing = NO;
         state.statusText = @"Engine unavailable";

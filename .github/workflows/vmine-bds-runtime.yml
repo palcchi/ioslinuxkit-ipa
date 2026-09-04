@@ -64,6 +64,7 @@ jobs:
           wget -q -O bds.zip "$BDS_URL"
           unzip -q bds.zip -d bds-root
           chmod +x bds-root/bedrock_server
+          sed -i 's/^max-threads=.*/max-threads=1/' bds-root/server.properties
 
           loader_src='bds-root/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2'
           if [ ! -f "$loader_src" ]; then
