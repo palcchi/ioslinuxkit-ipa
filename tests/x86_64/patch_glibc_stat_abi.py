@@ -30,7 +30,7 @@ struct stat_x86_64 {
     uint64_t mtime_nsec;
     int64_t ctime_;
     uint64_t ctime_nsec;
-    int64_t __unused[3];
+    int64_t reserved[3];
 };
 
 static struct stat_x86_64 stat_convert_x86_64(struct statbuf stat) {
