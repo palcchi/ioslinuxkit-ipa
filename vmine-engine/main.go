@@ -26,10 +26,7 @@ func main() {
 	}
 
 	srv := conf.New()
-	if err := srv.Listen(); err != nil {
-		fmt.Println("VMINE_SERVER_ERROR:", err)
-		os.Exit(1)
-	}
+	srv.Listen()
 	fmt.Println("VMINE_SERVER_READY:19132")
 	go console(srv)
 	for p := range srv.Accept() {
