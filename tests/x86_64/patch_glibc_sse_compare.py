@@ -252,10 +252,6 @@ insert = r'''            // 0F C2 /r ib: CMPPS/CMPPD/CMPSS/CMPSD. Legacy predica
                 uint8_t lane;
                 if (fetch_u8(cpu, next, &lane) < 0) goto gpf;
                 uint16_t extracted = cpu->xmm[rm.reg].u16[lane & 7];
-                static unsigned pextrw_trace_count;
-                if (pextrw_trace_count++ < 8)
-                    fprintf(stderr, "[vmine-x86-pextrw] pc=%llx dst=%u src=%u lane=%u value=%04x\\n",
-                            (unsigned long long)cpu->pc, gpr, rm.reg, lane & 7, extracted);
                 write_reg_bits(cpu, gpr, extracted, 32);
                 cpu->pc = next + 1;
                 cpu->cycle++;
