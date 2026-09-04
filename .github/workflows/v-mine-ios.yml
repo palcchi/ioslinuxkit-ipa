@@ -88,6 +88,16 @@ jobs:
           rm -rf build-vmine
           xcodebuild \
             -project V-MINE.xcodeproj \
+            -target V-MINEFileProvider \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-vmine \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee xcode-file-provider-build.log
+          xcodebuild \
+            -project V-MINE.xcodeproj \
             -scheme V-MINE-ARM64 \
             -configuration Release \
             -sdk iphoneos \
@@ -106,8 +116,13 @@ jobs:
         run: |
           set -euo pipefail
           APP=$(find build-vmine/Build/Products/Release-iphoneos -maxdepth 1 -type d -name '*.app' | head -1)
+          APPEX=$(find build-vmine/Build/Products/Release-iphoneos -maxdepth 1 -type d -name 'V-MINEFileProvider.appex' | head -1)
           test -n "$APP"
+          test -n "$APPEX"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist"
+          mkdir -p "$APP/PlugIns"
+          cp -R "$APPEX" "$APP/PlugIns/"
+          test -f "$APP/PlugIns/V-MINEFileProvider.appex/Info.plist"
           rm -rf Payload V-MINE-preview.ipa
           mkdir Payload
           cp -R "$APP" Payload/
