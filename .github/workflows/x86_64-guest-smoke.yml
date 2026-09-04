@@ -32,7 +32,7 @@ jobs:
             -DGUEST_X86_64=1 -I. \
             tests/x86_64/direct_guest_smoke.c \
             emu/arch/x86_64/interp.c \
-            -o x86_64-direct-smoke
+            -lm -o x86_64-direct-smoke
       - name: Run direct x86_64 interpreter smoke
         run: ./x86_64-direct-smoke
 
