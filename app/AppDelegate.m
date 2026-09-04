@@ -27,12 +27,15 @@
 #include "kernel/calls.h"
 #include "fs/dyndev.h"
 #include "fs/devices.h"
-#include "fs/fake.h"
 #include "fs/path.h"
 #if !ISH_LINUX && defined(GUEST_ARM64)
 #include "DebugServer.h"
 #endif
 #include "kernel/native_offload.h"
+
+// Public fakefs bind-mount bridge. fake.h itself is intentionally restricted
+// to internal C translation units, so iOS callers declare this API directly.
+int fakefs_bind_mount(const char *linux_path, const char *host_path, bool read_only);
 #ifdef ISH_FFMPEG_TEST
 extern void native_builtins_init(void);
 #endif
