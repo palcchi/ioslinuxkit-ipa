@@ -35,6 +35,12 @@ jobs:
             apt-get download libgcc-s1:amd64/jammy-updates || apt-get download libgcc-s1:amd64/jammy
           )
           for deb in rootfs-debs/*.deb; do dpkg-deb -x "$deb" rootfs; done
+          busybox_path=$(find rootfs -type f -name busybox -print -quit)
+          test -n "$busybox_path"
+          if [ "$busybox_path" != "rootfs/bin/busybox" ]; then
+            cp "$busybox_path" rootfs/bin/busybox
+            chmod 755 rootfs/bin/busybox
+          fi
           test -x rootfs/bin/busybox
           mkdir -p rootfs/opt/vmine/server rootfs/opt/vmine/data rootfs/opt/vmine/backups rootfs/ish
           tar --numeric-owner -C rootfs -czf vmine-jammy-amd64.tar.gz .
