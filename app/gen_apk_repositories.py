@@ -16,6 +16,10 @@ if GUEST_ARCH == 'arm64':
     # ARM64 guest: use official Alpine Linux CDN for aarch64 packages.
     for version, repo in APK_REPOSITORIES:
         repos_file.append(f'https://dl-cdn.alpinelinux.org/alpine/{version}/{repo}')
+elif GUEST_ARCH == 'x86_64':
+    # V-MINE's BDS guest is Ubuntu-based and uses apt, so the Alpine APK
+    # repository file is intentionally present but empty.
+    pass
 else:
     raise SystemExit(f'unsupported guest architecture: {GUEST_ARCH}')
 
