@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          { echo help; echo list; sleep 300; echo stop; } | gtimeout 600 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
+          { echo help; echo list; sleep 600; } | gtimeout 660 ./build-arm64/ish -f dragonfly-fakefs /bin/sh -c 'cd / && exec /vmine-dragonfly' >dragonfly.log 2>&1 &
           vmine_pid=$!
           set -e
           for attempt in $(seq 1 120); do
@@ -67,6 +67,12 @@ jobs:
             if ! kill -0 "$vmine_pid" 2>/dev/null; then break; fi
             sleep 5
           done
+          if [ -f dragonfly-startup.ok ]; then
+            for attempt in $(seq 1 30); do
+              if grep -q 'Commands: help, stop, list' dragonfly.log && grep -q 'VMINE_PLAYERS:' dragonfly.log; then break; fi
+              sleep 2
+            done
+          fi
           if [ -f dragonfly-startup.ok ]; then kill "$vmine_pid" 2>/dev/null || true; fi
           set +e
           wait "$vmine_pid"
